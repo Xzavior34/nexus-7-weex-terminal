@@ -131,8 +131,13 @@ export function PulseLineChart({
         </div>
       )}
 
-      {/* Chart */}
-      <div className="h-48">
+      {/* Chart with Gradient Scan */}
+      <div className="h-48 relative overflow-hidden">
+        {/* Gradient scan animation overlay */}
+        <div className="absolute inset-0 pointer-events-none z-10">
+          <div className="gradient-scan-line" />
+        </div>
+        
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
             <defs>

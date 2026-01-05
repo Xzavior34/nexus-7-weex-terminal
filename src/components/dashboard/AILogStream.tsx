@@ -13,15 +13,16 @@ interface AILogStreamProps {
   externalLogs?: LogEntry[];
 }
 
+// Updated color scheme: RISK=Orange, PROFIT/EXEC=Neon Green, API=Cyan
 const LOG_TYPES = {
   API: { color: "text-terminal-cyan", prefix: "[WEEX-API]", bgColor: "bg-terminal-cyan/10" },
   AI: { color: "text-terminal-purple", prefix: "[AI-MODEL]", bgColor: "bg-terminal-purple/10" },
-  RISK: { color: "text-terminal-yellow", prefix: "[RISK-GUARD]", bgColor: "bg-terminal-yellow/10" },
+  RISK: { color: "text-warning", prefix: "[RISK]", bgColor: "bg-warning/10" },
   EXEC: { color: "text-primary", prefix: "[EXECUTION]", bgColor: "bg-primary/10" },
   SYSTEM: { color: "text-muted-foreground", prefix: "[SYSTEM]", bgColor: "bg-muted/10" },
   api: { color: "text-terminal-cyan", prefix: "[WEEX-API]", bgColor: "bg-terminal-cyan/10" },
   ai: { color: "text-terminal-purple", prefix: "[AI-MODEL]", bgColor: "bg-terminal-purple/10" },
-  risk: { color: "text-terminal-yellow", prefix: "[RISK-GUARD]", bgColor: "bg-terminal-yellow/10" },
+  risk: { color: "text-warning", prefix: "[RISK]", bgColor: "bg-warning/10" },
   execution: { color: "text-primary", prefix: "[EXECUTION]", bgColor: "bg-primary/10" },
   system: { color: "text-muted-foreground", prefix: "[SYSTEM]", bgColor: "bg-muted/10" },
 };
@@ -105,9 +106,12 @@ export function AILogStream({ externalLogs = [] }: AILogStreamProps) {
   };
 
   return (
-    <div className="flex flex-col h-full rounded-xl bg-card border border-border overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-secondary/50">
+    <div className="flex flex-col h-full rounded-xl bg-background border border-border overflow-hidden terminal-container relative">
+      {/* Scanline overlay for CRT effect */}
+      <div className="absolute inset-0 pointer-events-none terminal-scanlines opacity-[0.03]" />
+      
+      {/* Header - Hacker Terminal Style */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-primary/30 bg-primary/5 relative z-10">
         <div className="flex items-center gap-2">
           <div className="relative">
             <Terminal className="w-4 h-4 text-primary" />
@@ -115,27 +119,27 @@ export function AILogStream({ externalLogs = [] }: AILogStreamProps) {
               <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-primary rounded-full animate-pulse" />
             )}
           </div>
-          <span className="font-bold text-sm text-foreground">AI Logic Stream</span>
-          <span className="px-2 py-0.5 text-xs font-medium rounded bg-primary/20 text-primary">
-            {isPaused ? "PAUSED" : "LIVE"}
+          <span className="font-bold text-sm text-primary terminal-text">AI Logic Stream</span>
+          <span className="px-2 py-0.5 text-xs font-medium rounded bg-primary/20 text-primary border border-primary/30">
+            {isPaused ? "PAUSED" : "● LIVE"}
           </span>
         </div>
         
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsPaused(!isPaused)}
-            className="p-1.5 rounded-lg hover:bg-accent transition-colors"
+            className="p-1.5 rounded-lg hover:bg-primary/10 transition-colors border border-primary/20"
             title={isPaused ? "Resume" : "Pause"}
           >
             {isPaused ? (
               <Play className="w-4 h-4 text-primary" />
             ) : (
-              <Pause className="w-4 h-4 text-muted-foreground" />
+              <Pause className="w-4 h-4 text-primary/70" />
             )}
           </button>
           <button
             onClick={clearLogs}
-            className="p-1.5 rounded-lg hover:bg-accent transition-colors"
+            className="p-1.5 rounded-lg hover:bg-destructive/10 transition-colors border border-primary/20"
             title="Clear logs"
           >
             <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
@@ -143,15 +147,16 @@ export function AILogStream({ externalLogs = [] }: AILogStreamProps) {
         </div>
       </div>
 
-      {/* Log Stream */}
+      {/* Log Stream - Hacker Terminal */}
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-4 space-y-1 custom-scrollbar bg-background/50"
-        style={{ fontFamily: "'JetBrains Mono', 'SF Mono', monospace" }}
+        className="flex-1 overflow-y-auto p-4 space-y-0.5 custom-scrollbar bg-background relative z-10"
+        style={{ fontFamily: "'JetBrains Mono', 'Courier New', monospace" }}
       >
         {logs.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-            Waiting for trading signals...
+          <div className="flex items-center justify-center h-full text-primary/50 text-sm terminal-text">
+            <span className="animate-pulse">█</span>
+            <span className="ml-2">Awaiting neural signals...</span>
           </div>
         ) : (
           logs.map((log, index) => {
@@ -162,41 +167,79 @@ export function AILogStream({ externalLogs = [] }: AILogStreamProps) {
               <div
                 key={log.id}
                 className={cn(
-                  "flex items-start gap-2 py-1.5 px-2 rounded transition-all duration-300",
-                  isLatest && "animate-fade-in-up",
-                  isLatest && typeConfig.bgColor
+                  "flex items-start gap-2 py-1 px-2 rounded-sm transition-all duration-200 hover:bg-primary/5",
+                  isLatest && "animate-typewriter-line"
                 )}
               >
-                <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
+                <span className="text-xs text-primary/40 shrink-0 tabular-nums font-mono">
                   {log.timestamp}
                 </span>
-                <span className={cn("text-xs font-bold shrink-0", typeConfig.color)}>
+                <span className={cn("text-xs font-bold shrink-0 font-mono", typeConfig.color)}>
                   {typeConfig.prefix}
                 </span>
-                <span 
-                  className={cn(
-                    "text-xs text-foreground",
-                    isLatest && log.type === "EXEC" && "text-glow-profit"
-                  )}
-                >
-                  {log.message}
-                  {isLatest && <span className="animate-cursor ml-0.5">_</span>}
-                </span>
+                <TypewriterText 
+                  text={log.message} 
+                  isLatest={isLatest} 
+                  isExec={log.type === "EXEC" || log.type === "execution"}
+                />
               </div>
             );
           })
         )}
       </div>
 
-      {/* Footer */}
-      <div className="flex items-center justify-between px-4 py-2 border-t border-border bg-secondary/30">
-        <span className="text-xs text-muted-foreground">
-          {logs.length} entries • Last 60 seconds
+      {/* Footer - Hacker Style */}
+      <div className="flex items-center justify-between px-4 py-2 border-t border-primary/30 bg-primary/5 relative z-10">
+        <span className="text-xs text-primary/60 font-mono">
+          {logs.length} entries • {isPaused ? "PAUSED" : "STREAMING"}
         </span>
-        <span className="text-xs text-muted-foreground">
-          Model: <span className="text-foreground">Nexus-7 v2.1</span>
+        <span className="text-xs text-primary/60 font-mono">
+          <span className="text-primary">root@nexus-7</span>:~/trading $
         </span>
       </div>
     </div>
+  );
+}
+
+// Typewriter component for character-by-character effect
+function TypewriterText({ text, isLatest, isExec }: { text: string; isLatest: boolean; isExec: boolean }) {
+  const [displayedText, setDisplayedText] = useState(isLatest ? "" : text);
+  
+  useEffect(() => {
+    if (!isLatest) {
+      setDisplayedText(text);
+      return;
+    }
+    
+    let index = 0;
+    setDisplayedText("");
+    
+    const interval = setInterval(() => {
+      if (index < text.length) {
+        setDisplayedText(text.slice(0, index + 1));
+        index++;
+      } else {
+        clearInterval(interval);
+      }
+    }, 15); // Fast typewriter speed
+    
+    return () => clearInterval(interval);
+  }, [text, isLatest]);
+  
+  return (
+    <span 
+      className={cn(
+        "text-xs text-foreground/90 font-mono",
+        isExec && "text-primary text-glow-profit"
+      )}
+    >
+      {displayedText}
+      {isLatest && displayedText.length < text.length && (
+        <span className="text-primary animate-pulse">█</span>
+      )}
+      {isLatest && displayedText.length === text.length && (
+        <span className="text-primary animate-cursor ml-0.5">_</span>
+      )}
+    </span>
   );
 }

@@ -6,6 +6,8 @@ import { ActiveStrategies } from "@/components/dashboard/ActiveStrategies";
 import { WalletPnL } from "@/components/dashboard/WalletPnL";
 import { RiskMatrix } from "@/components/dashboard/RiskMatrix";
 import { AudioControls } from "@/components/dashboard/AudioControls";
+import { StatusBar } from "@/components/dashboard/StatusBar";
+import { RiskManagerWidget } from "@/components/dashboard/RiskManagerWidget";
 import { useTradeSignals } from "@/hooks/useTradeSignals";
 
 const Index = () => {
@@ -43,7 +45,11 @@ const Index = () => {
       />
 
       {/* Main Content */}
-      <main className="flex-1 p-6 overflow-auto">
+      <div className="flex-1 flex flex-col overflow-auto">
+        {/* Status Bar - Heartbeat Header */}
+        <StatusBar />
+        
+        <main className="flex-1 p-6">
         {/* Header */}
         <header className="mb-6">
           <div className="flex items-center justify-between">
@@ -105,11 +111,13 @@ const Index = () => {
           {/* Right Column - Stats & Info */}
           <div className="space-y-6">
             <WalletPnL />
+            <RiskManagerWidget />
             <RiskMatrix />
             <ActiveStrategies />
           </div>
         </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 };

@@ -299,4 +299,66 @@
     border-right: 2px solid;
     animation: blink-cursor 1s step-end infinite;
   }
+
+  /* Gradient Scan Animation for Charts */
+  @keyframes gradient-scan {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(400%);
+    }
+  }
+
+  .gradient-scan-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 25%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      hsl(var(--profit) / 0.03) 30%,
+      hsl(var(--profit) / 0.08) 50%,
+      hsl(var(--profit) / 0.03) 70%,
+      transparent 100%
+    );
+    animation: gradient-scan 4s ease-in-out infinite;
+  }
+
+  /* Terminal Container Styling */
+  .terminal-container {
+    position: relative;
+    background: linear-gradient(
+      180deg,
+      hsl(0 0% 2%) 0%,
+      hsl(0 0% 3%) 100%
+    );
+  }
+
+  /* CRT Scanlines Effect */
+  .terminal-scanlines {
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 1px,
+      hsl(0 0% 0% / 0.3) 1px,
+      hsl(0 0% 0% / 0.3) 2px
+    );
+  }
+
+  /* Typewriter Line Animation */
+  @keyframes typewriter-line {
+    from {
+      background-color: hsl(var(--profit) / 0.1);
+    }
+    to {
+      background-color: transparent;
+    }
+  }
+
+  .animate-typewriter-line {
+    animation: typewriter-line 1s ease-out forwards;
+  }
 }
