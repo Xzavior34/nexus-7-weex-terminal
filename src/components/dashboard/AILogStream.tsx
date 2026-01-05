@@ -5,8 +5,12 @@ import { Terminal, Pause, Play, Trash2 } from "lucide-react";
 interface LogEntry {
   id: string;
   timestamp: string;
-  type: "API" | "AI" | "RISK" | "EXEC" | "SYSTEM";
+  type: "API" | "AI" | "RISK" | "EXEC" | "SYSTEM" | "api" | "ai" | "risk" | "execution" | "system";
   message: string;
+}
+
+interface AILogStreamProps {
+  externalLogs?: LogEntry[];
 }
 
 const LOG_TYPES = {
@@ -15,6 +19,11 @@ const LOG_TYPES = {
   RISK: { color: "text-terminal-yellow", prefix: "[RISK-GUARD]", bgColor: "bg-terminal-yellow/10" },
   EXEC: { color: "text-primary", prefix: "[EXECUTION]", bgColor: "bg-primary/10" },
   SYSTEM: { color: "text-muted-foreground", prefix: "[SYSTEM]", bgColor: "bg-muted/10" },
+  api: { color: "text-terminal-cyan", prefix: "[WEEX-API]", bgColor: "bg-terminal-cyan/10" },
+  ai: { color: "text-terminal-purple", prefix: "[AI-MODEL]", bgColor: "bg-terminal-purple/10" },
+  risk: { color: "text-terminal-yellow", prefix: "[RISK-GUARD]", bgColor: "bg-terminal-yellow/10" },
+  execution: { color: "text-primary", prefix: "[EXECUTION]", bgColor: "bg-primary/10" },
+  system: { color: "text-muted-foreground", prefix: "[SYSTEM]", bgColor: "bg-muted/10" },
 };
 
 const MOCK_MESSAGES: Omit<LogEntry, "id" | "timestamp">[] = [
@@ -44,11 +53,25 @@ const MOCK_MESSAGES: Omit<LogEntry, "id" | "timestamp">[] = [
   { type: "EXEC", message: "Queuing hedge position on perpetual..." },
 ];
 
-export function AILogStream() {
+export function AILogStream({ externalLogs = [] }: AILogStreamProps) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isPaused, setIsPaused] = useState(false);
   const [messageIndex, setMessageIndex] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Merge external logs
+  useEffect(() => {
+    if (externalLogs.length > 0) {
+      const mappedLogs = externalLogs.map(log => ({
+        ...log,
+        timestamp: new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false }),
+      }));
+      setLogs(prev => {
+        const combined = [...prev, ...mappedLogs.filter(l => !prev.some(p => p.id === l.id))];
+        return combined.slice(-50);
+      });
+    }
+  }, [externalLogs]);
 
   // Add new log entries periodically
   useEffect(() => {

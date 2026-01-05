@@ -1,12 +1,38 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { TradingSidebar } from "@/components/dashboard/TradingSidebar";
 import { PulseLineChart } from "@/components/dashboard/PulseLineChart";
 import { AILogStream } from "@/components/dashboard/AILogStream";
 import { ActiveStrategies } from "@/components/dashboard/ActiveStrategies";
 import { WalletPnL } from "@/components/dashboard/WalletPnL";
+import { RiskMatrix } from "@/components/dashboard/RiskMatrix";
+import { AudioControls } from "@/components/dashboard/AudioControls";
+import { useTradeSignals } from "@/hooks/useTradeSignals";
 
 const Index = () => {
   const [activeSection, setActiveSection] = useState("markets");
+  const [audioEnabled, setAudioEnabled] = useState(true);
+  const [audioVolume, setAudioVolume] = useState(0.5);
+  const [sessionTime, setSessionTime] = useState(0);
+
+  const { logs, isConnected } = useTradeSignals({ 
+    audioEnabled, 
+    audioVolume 
+  });
+
+  // Session timer
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSessionTime(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const formatTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
 
   return (
     <div className="flex min-h-screen w-full bg-background">
@@ -29,14 +55,22 @@ const Index = () => {
                 Visualizing AI trading decisions in real-time • WEEX Alpha Awakens
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
+              <AudioControls
+                enabled={audioEnabled}
+                volume={audioVolume}
+                onEnabledChange={setAudioEnabled}
+                onVolumeChange={setAudioVolume}
+              />
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20">
-                <span className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-                <span className="text-sm font-medium text-primary">LIVE</span>
+                <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-primary animate-pulse' : 'bg-muted-foreground'}`} />
+                <span className={`text-sm font-medium ${isConnected ? 'text-primary' : 'text-muted-foreground'}`}>
+                  {isConnected ? 'LIVE' : 'CONNECTING'}
+                </span>
               </div>
               <div className="text-right">
                 <p className="text-xs text-muted-foreground">Session</p>
-                <p className="text-sm font-medium text-foreground tabular-nums">00:42:17</p>
+                <p className="text-sm font-medium text-foreground tabular-nums">{formatTime(sessionTime)}</p>
               </div>
             </div>
           </div>
@@ -64,13 +98,14 @@ const Index = () => {
 
             {/* AI Logic Stream */}
             <div className="h-80">
-              <AILogStream />
+              <AILogStream externalLogs={logs} />
             </div>
           </div>
 
           {/* Right Column - Stats & Info */}
           <div className="space-y-6">
             <WalletPnL />
+            <RiskMatrix />
             <ActiveStrategies />
           </div>
         </div>
