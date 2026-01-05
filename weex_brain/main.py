@@ -1,99 +1,60 @@
-#!/usr/bin/env python3
-"""
-Nexus-7: GlassBox Trading Engine
-WEEX Alpha Awakens Hackathon Entry
-
-This is the main entry point for the trading bot.
-It connects to WEEX, runs AI analysis, and pushes data to the dashboard.
-"""
-
+ import uvicorn
 import asyncio
-import signal
-import sys
+import json
+import random
+from fastapi import FastAPI, WebSocket
+from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 
-# Local imports (uncomment when implementing)
-# from weex_config import WEEX_API_KEY, WEEX_API_SECRET, TRADING_PAIRS
-# from ai_log_generator import AILogGenerator
-# from strategy_loader import StrategyLoader
+# --- THIS IS THE CRITICAL PART RENDER NEEDS ---
+app = FastAPI() 
 
-async def main():
-    """Main trading loop"""
-    print(f"""
-    ╔═══════════════════════════════════════════════════════════╗
-    ║                                                           ║
-    ║   ███╗   ██╗███████╗██╗  ██╗██╗   ██╗███████╗    ███████╗ ║
-    ║   ████╗  ██║██╔════╝╚██╗██╔╝██║   ██║██╔════╝    ╚════██║ ║
-    ║   ██╔██╗ ██║█████╗   ╚███╔╝ ██║   ██║███████╗        ██╔╝ ║
-    ║   ██║╚██╗██║██╔══╝   ██╔██╗ ██║   ██║╚════██║       ██╔╝  ║
-    ║   ██║ ╚████║███████╗██╔╝ ██╗╚██████╔╝███████║       ██║   ║
-    ║   ╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝       ╚═╝   ║
-    ║                                                           ║
-    ║            GlassBox Trading Terminal v2.1                 ║
-    ║            WEEX Alpha Awakens Competition                 ║
-    ║                                                           ║
-    ╚═══════════════════════════════════════════════════════════╝
+# Allow frontend to connect
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.websocket("/ws/stream")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    print("⚡ MOCK MODE: Connected to Dashboard")
     
-    Starting at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-    """)
+    price = 145.20 
     
-    # TODO: Implement the following:
-    # 
-    # 1. Initialize WEEX connection
-    # exchange = ccxt.weex({
-    #     'apiKey': WEEX_API_KEY,
-    #     'secret': WEEX_API_SECRET,
-    #     'enableRateLimit': True,
-    # })
-    #
-    # 2. Initialize log generator with WebSocket to dashboard
-    # logger = AILogGenerator(ws_client)
-    # await logger.system("Nexus-7 GlassBox Terminal initialized...")
-    #
-    # 3. Load trading strategies
-    # strategy_loader = StrategyLoader()
-    # strategy_loader.load_default_strategies()
-    #
-    # 4. Main trading loop
-    # while True:
-    #     for pair in TRADING_PAIRS:
-    #         # Fetch market data
-    #         await logger.api(f"Fetching order book for {pair}...")
-    #         orderbook = await exchange.fetch_order_book(pair)
-    #         
-    #         # Run AI analysis
-    #         for strategy in strategy_loader.get_strategies_for_pair(pair):
-    #             signal = await strategy.analyze(orderbook)
-    #             if signal:
-    #                 await logger.ai(f"Signal: {signal.signal.value} ({signal.confidence})")
-    #                 
-    #                 # Risk check
-    #                 await logger.risk("Checking position limits...")
-    #                 
-    #                 # Execute if valid
-    #                 if signal.confidence > 0.7:
-    #                     await logger.execution(f"Placing order @ {signal.entry_price}")
-    #     
-    #     await asyncio.sleep(1)  # Respect rate limits
-    
-    print("\n⚠️  Trading engine not yet implemented.")
-    print("    Configure weex_config.py with your API keys to begin.\n")
+    while True:
+        # 1. Fake Price Movement
+        price += random.uniform(-0.5, 0.5)
+        
+        # 2. Fake Logs
+        log_types = ["AI_SCAN", "WEEX_API", "RISK_CHECK", "OPPORTUNITY"]
+        chosen_type = random.choice(log_types)
+        
+        log_msg = ""
+        if chosen_type == "WEEX_API":
+            log_msg = f"Latency 45ms - Orderbook depth verified."
+        elif chosen_type == "AI_SCAN":
+            log_msg = f"Sentiment Analysis: BULLISH ({random.randint(80,99)}%)"
+        elif chosen_type == "OPPORTUNITY":
+            log_msg = "Arbitrage spread 0.15% detected on SOL/USDT."
+        elif chosen_type == "RISK_CHECK":
+            log_msg = "Margin safe. Leverage capped at 5x."
 
+        data = {
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "symbol": "SOL/USDT",
+            "price": round(price, 2),
+            "type": chosen_type,
+            "message": log_msg
+        }
+        
+        # 3. Send to Dashboard
+        await websocket.send_text(json.dumps(data))
+        await asyncio.sleep(1.5)
 
-def shutdown_handler(signum, frame):
-    """Handle graceful shutdown"""
-    print("\n\n🛑 Shutdown signal received. Closing positions...")
-    # TODO: Implement graceful shutdown
-    # - Close all open positions
-    # - Cancel pending orders
-    # - Disconnect from WEEX
-    sys.exit(0)
-
-
+# This allows Render to start the app
 if __name__ == "__main__":
-    # Register shutdown handlers
-    signal.signal(signal.SIGINT, shutdown_handler)
-    signal.signal(signal.SIGTERM, shutdown_handler)
-    
-    # Run the main loop
-    asyncio.run(main())
+    uvicorn.run(app, host="0.0.0.0", port=8000)
