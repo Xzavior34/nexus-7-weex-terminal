@@ -1,0 +1,7 @@
+{
+  "name": "weex-algo-core",
+  "scripts": {
+    "trade": "python3 main.py",
+    "test-connection": "python3 test_api.py"
+  }
+}
