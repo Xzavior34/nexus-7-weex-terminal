@@ -1,4 +1,4 @@
- import uvicorn
+import uvicorn
 import asyncio
 import json
 import random
@@ -6,10 +6,8 @@ from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 
-# --- THIS IS THE CRITICAL PART RENDER NEEDS ---
-app = FastAPI() 
+app = FastAPI()
 
-# Allow frontend to connect
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -26,10 +24,8 @@ async def websocket_endpoint(websocket: WebSocket):
     price = 145.20 
     
     while True:
-        # 1. Fake Price Movement
         price += random.uniform(-0.5, 0.5)
         
-        # 2. Fake Logs
         log_types = ["AI_SCAN", "WEEX_API", "RISK_CHECK", "OPPORTUNITY"]
         chosen_type = random.choice(log_types)
         
@@ -51,10 +47,8 @@ async def websocket_endpoint(websocket: WebSocket):
             "message": log_msg
         }
         
-        # 3. Send to Dashboard
         await websocket.send_text(json.dumps(data))
         await asyncio.sleep(1.5)
 
-# This allows Render to start the app
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
