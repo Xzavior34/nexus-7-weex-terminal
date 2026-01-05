@@ -1,5 +1,4 @@
-import { useEffect, useCallback, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { useAudioFeedback } from "./useAudioFeedback";
 
 export interface LogEntry {
@@ -13,15 +12,6 @@ export interface PriceUpdate {
   symbol: string;
   price: number;
   change: number;
-  timestamp: string;
-}
-
-export interface TradeExecution {
-  id: string;
-  symbol: string;
-  side: 'buy' | 'sell';
-  price: number;
-  amount: number;
   timestamp: string;
 }
 
@@ -44,12 +34,14 @@ export const useTradeSignals = (options: UseTradeSignalsOptions = {}) => {
   const [prices, setPrices] = useState<Record<string, PriceUpdate>>({});
   const [opportunities, setOpportunities] = useState<OpportunitySignal[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
 
   const { playSound, announceEvent } = useAudioFeedback({ 
     enabled: audioEnabled, 
     volume: audioVolume 
   });
 
+  // Helper to add logs locally
   const addLog = useCallback((log: Omit<LogEntry, 'id'>) => {
     const newLog: LogEntry = {
       ...log,
@@ -59,74 +51,89 @@ export const useTradeSignals = (options: UseTradeSignalsOptions = {}) => {
   }, []);
 
   useEffect(() => {
-    console.log('[TRADE-SIGNALS] Setting up realtime subscription...');
-    
-    const channel = supabase.channel('trade-signals')
-      .on('broadcast', { event: 'log' }, ({ payload }) => {
-        console.log('[TRADE-SIGNALS] Received log:', payload);
-        addLog({
-          timestamp: payload.timestamp,
-          type: payload.logType || 'system',
-          message: payload.message,
-        });
-        playSound('tick');
-      })
-      .on('broadcast', { event: 'trade' }, ({ payload }) => {
-        console.log('[TRADE-SIGNALS] Received trade:', payload);
-        const trade = payload as TradeExecution;
-        addLog({
-          timestamp: trade.timestamp,
-          type: 'execution',
-          message: `${trade.side.toUpperCase()} ${trade.amount} ${trade.symbol} @ ${trade.price}`,
-        });
-        announceEvent('trade_executed', `${trade.side} ${trade.symbol} at ${trade.price}`);
-      })
-      .on('broadcast', { event: 'price' }, ({ payload }) => {
-        const price = payload as PriceUpdate;
-        setPrices(prev => ({
-          ...prev,
-          [price.symbol]: price,
-        }));
-      })
-      .on('broadcast', { event: 'opportunity' }, ({ payload }) => {
-        console.log('[TRADE-SIGNALS] Received opportunity:', payload);
-        const opp = payload as OpportunitySignal;
-        setOpportunities(prev => [...prev.slice(-4), opp]);
-        addLog({
-          timestamp: opp.timestamp,
-          type: 'ai',
-          message: `Opportunity detected: ${opp.direction.toUpperCase()} ${opp.symbol} (${(opp.confidence * 100).toFixed(0)}% confidence)`,
-        });
-        announceEvent('opportunity', `${opp.direction} ${opp.symbol} with ${(opp.confidence * 100).toFixed(0)} percent confidence`);
-      })
-      .on('broadcast', { event: 'risk_update' }, ({ payload }) => {
-        console.log('[TRADE-SIGNALS] Received risk update:', payload);
-        if (payload.level === 'warning' || payload.level === 'critical') {
-          addLog({
-            timestamp: payload.timestamp,
-            type: 'risk',
-            message: payload.message,
-          });
-          announceEvent('risk_warning', payload.message);
-        }
-      })
-      .subscribe((status) => {
-        console.log('[TRADE-SIGNALS] Subscription status:', status);
-        setIsConnected(status === 'SUBSCRIBED');
-        if (status === 'SUBSCRIBED') {
-          addLog({
-            timestamp: new Date().toISOString(),
-            type: 'system',
-            message: 'Connected to Nexus-7 trade signal stream',
-          });
-        }
-      });
+    // ---------------------------------------------------------
+    // 🔗 CONNECT TO YOUR RENDER BACKEND HERE
+    // ---------------------------------------------------------
+    const wsUrl = 'wss://nexus-7-weex-terminal.onrender.com/ws/stream';
+    console.log(`[NEXUS-7] Connecting to Brain at: ${wsUrl}`);
 
-    return () => {
-      console.log('[TRADE-SIGNALS] Cleaning up subscription...');
-      supabase.removeChannel(channel);
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log('[NEXUS-7] ✅ Connected to Render Brain');
+      setIsConnected(true);
+      addLog({
+        timestamp: new Date().toLocaleTimeString(),
+        type: 'system',
+        message: '⚡ LINK ESTABLISHED: Connected to Nexus-7 Brain (Render Cloud)'
+      });
+      playSound('success');
     };
-  }, [addLog, playSound, announceEvent]);
+
+    ws.onclose = () => {
+      console.log('[NEXUS-7] ❌ Disconnected');
+      setIsConnected(false);
+      addLog({
+        timestamp: new Date().toLocaleTimeString(),
+        type: 'system',
+        message: '⚠️ DISCONNECTED: Reconnecting to Brain...'
+      });
+    };
+
+    ws.onerror = (error) => {
+      console.error('[NEXUS-7] WebSocket Error:', error);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        // 1. Handle Logs (AI Logic, Risks, API Calls)
+        if (data.type) {
+            let logType: LogEntry['type'] = 'system';
+            
+            // Map backend types to frontend types
+            if (data.type === 'WEEX_API') logType = 'api';
+            else if (data.type === 'AI_SCAN') logType = 'ai';
+            else if (data.type === 'RISK_CHECK') logType = 'risk';
+            else if (data.type === 'OPPORTUNITY') logType = 'execution';
+
+            addLog({
+                timestamp: data.timestamp || new Date().toLocaleTimeString(),
+                type: logType,
+                message: data.message || JSON.stringify(data)
+            });
+            
+            // Audio Feedback for important events
+            if (logType === 'execution') playSound('execution');
+            else if (logType === 'risk') playSound('alert');
+            else playSound('tick');
+        }
+
+        // 2. Handle Price Updates (if sent separately)
+        if (data.price && data.symbol) {
+            setPrices(prev => ({
+                ...prev,
+                [data.symbol]: {
+                    symbol: data.symbol,
+                    price: data.price,
+                    change: 0, // Mock change if not provided
+                    timestamp: new Date().toISOString()
+                }
+            }));
+        }
+
+      } catch (e) {
+        console.error('Error parsing WebSocket message:', e);
+      }
+    };
+
+    // Cleanup on unmount
+    return () => {
+      ws.close();
+    };
+  }, [addLog, playSound]);
 
   const clearLogs = useCallback(() => {
     setLogs([]);
