@@ -82,8 +82,9 @@ If you want to run Nexus-7 locally on your machine:
 ```
 git clone [https://github.com/Xzavior34/nexus-7-weex-terminal.git](https://github.com/Xzavior34/nexus-7-weex-terminal.git)
 cd nexus-7-weex-terminal
-2. Setup Backend (The Brain)
 ```
+2. Setup Backend (The Brain)
+
 ```
 
 cd weex_brain
@@ -91,6 +92,7 @@ python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 python main.py
+```
 The backend will start at http://localhost:8000
 ```
 3. Setup Frontend (The Face)
