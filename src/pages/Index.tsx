@@ -8,6 +8,7 @@ import { RiskMatrix } from "@/components/dashboard/RiskMatrix";
 import { AudioControls } from "@/components/dashboard/AudioControls";
 import { StatusBar } from "@/components/dashboard/StatusBar";
 import { RiskManagerWidget } from "@/components/dashboard/RiskManagerWidget";
+import { TradingHeartbeat } from "@/components/dashboard/TradingHeartbeat";
 import { useTradeSignals } from "@/hooks/useTradeSignals";
 
 const Index = () => {
@@ -101,6 +102,12 @@ const Index = () => {
                 isOpportunity={true}
               />
             </div>
+
+            {/* Trading Heartbeat */}
+            <TradingHeartbeat 
+              activityLevel={65} 
+              isConnected={isConnected} 
+            />
 
             {/* AI Logic Stream */}
             <div className="h-80">
