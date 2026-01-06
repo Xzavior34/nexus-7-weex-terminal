@@ -106,7 +106,7 @@ export const useTradeSignals = (options: UseTradeSignalsOptions = {}) => {
             });
             
             // Audio Feedback for important events
-            if (logType === 'execution') playSound('execution');
+            if (logType === 'execution') playSound('trade');
             else if (logType === 'risk') playSound('alert');
             else playSound('tick');
         }
