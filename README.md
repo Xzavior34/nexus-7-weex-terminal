@@ -1,73 +1,70 @@
-# Welcome to your Lovable project
+# Nexus-7: GlassBox Trading Terminal 🧠
 
-## Project info
+![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
+![Tech Stack](https://img.shields.io/badge/stack-Python%20%7C%20React%20%7C%20FastAPI-blue)
+![Hackathon](https://img.shields.io/badge/hackathon-WEEX%20Alpha%20Awakens-orange)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+> **"Trust shouldn't be blind. It should be visible."**
 
-## How can I edit this code?
+**Nexus-7** is the first "GlassBox" algorithmic trading terminal built exclusively for the **WEEX Alpha Awakens 2025 Hackathon**. Unlike standard "Black Box" bots that hide their logic, Nexus-7 visualizes its AI decision-making process in real-time—streaming sentiment analysis, volatility calculations, and risk checks directly to the user's dashboard.
 
-There are several ways of editing your application.
+---
 
-**Use Lovable**
+## 🔗 Live Demo
+- **Live Terminal:** [https://nexus-7-weex-terminal.vercel.app](https://nexus-7-weex-terminal.vercel.app)
+- **Demo Video:** [Watch on YouTube](https://youtu.be/uBmzo1J6hp8)
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+---
 
-Changes made via Lovable will be committed automatically to this repo.
+## ✨ Key Features
 
-**Use your preferred IDE**
+### 🧠 Real-Time AI Logic Stream
+A scrolling console that visualizes the "brain" of the bot. Watch as the AI:
+- Scans the WEEX order book for liquidity.
+- Analyzes market sentiment (Bullish/Bearish confidence scores).
+- Calculates volatility metrics (Standard Deviation, ATR).
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### 🛡️ Autonomous Risk Manager
+Safety is hard-coded into the core. The independent Risk Module:
+- **Caps Leverage at 5x:** Strictly adheres to hackathon compliance rules.
+- **Exposure Checks:** Prevents over-allocation (>20% portfolio) in a single asset.
+- **Kill Switch:** Instantly halts trading if latency exceeds 200ms.
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### ⚡ WEEX Integration
+- Built using `ccxt` for standardized connectivity to WEEX Spot and Futures markets.
+- Zero-lag WebSocket connection for price updates.
 
-Follow these steps:
+### 📊 Command Center UI
+- **Active Strategies:** Real-time PnL tracking for Arbitrage and Trend Following modules.
+- **Audio Feedback:** Distinct sound cues for "Opportunity Found," "Trade Executed," and "Risk Alert."
+- **Multi-Asset Support:** Monitors BTC/USDT, SOL/USDT, and ETH/USDT simultaneously.
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+---
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+## 🛠️ Tech Stack
 
-# Step 3: Install the necessary dependencies.
-npm i
+### The Brain (Backend)
+- **Language:** Python 3.10+
+- **Framework:** FastAPI (AsyncIO)
+- **Deployment:** Render (Cloud)
+- **Key Libraries:** `ccxt` (Exchange API), `numpy` (Math), `websockets` (Streaming)
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+### The Face (Frontend)
+- **Framework:** React + TypeScript (Vite)
+- **Deployment:** Vercel
+- **Styling:** Tailwind CSS + ShadcnUI
+- **State:** React Hooks (Custom `useTradeSignals`)
 
-**Edit a file directly in GitHub**
+---
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## 🏗️ Architecture
 
-**Use GitHub Codespaces**
+The system uses a decoupled **"Brain & Face"** architecture to ensure high performance.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+```mermaid
+graph LR
+    A[WEEX Exchange] <-->|Rest API / WSS| B(Python Brain / Render)
+    B -->|Secure WebSocket Stream| C(React Dashboard / Vercel)
+    C -->|User Commands| B
+    D[Risk Manager] -->|Block/Allow| B
