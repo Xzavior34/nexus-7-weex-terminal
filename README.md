@@ -68,3 +68,50 @@ graph LR
     B -->|Secure WebSocket Stream| C(React Dashboard / Vercel)
     C -->|User Commands| B
     D[Risk Manager] -->|Block/Allow| B
+```
+The Brain runs a continuous while True loop on Render, analyzing markets 24/7.
+
+The Brain pushes "Thoughts" (Logs) and "Actions" (Trades) to the Frontend via WebSockets.
+
+The Frontend is purely visual—it displays whatever the Brain tells it, ensuring the user sees exactly what the algorithm sees.
+
+🚀 Local Installation
+If you want to run Nexus-7 locally on your machine:
+
+1. Clone the Repo
+```
+git clone [https://github.com/Xzavior34/nexus-7-weex-terminal.git](https://github.com/Xzavior34/nexus-7-weex-terminal.git)
+cd nexus-7-weex-terminal
+2. Setup Backend (The Brain)
+```
+```
+
+cd weex_brain
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+python main.py
+The backend will start at http://localhost:8000
+```
+3. Setup Frontend (The Face)
+Open a new terminal:
+```
+# Return to root
+cd ..
+npm install
+npm run dev
+The frontend will start at http://localhost:8080
+```
+⚠️ Hackathon Compliance Note
+This project was built specifically for the WEEX Alpha Awakens competition.
+
+Leverage: Hard-capped at 5x in risk_manager.py.
+
+API Use: Optimized to respect WEEX rate limits.
+
+KYC: Developed by a verified WEEX user.
+
+👨‍💻 Developer
+Built by Xzavior34 Solo Full-Stack Engineer
+
+MIT License © 2025
