@@ -9,6 +9,7 @@ import { AudioControls } from "@/components/dashboard/AudioControls";
 import { StatusBar } from "@/components/dashboard/StatusBar";
 import { RiskManagerWidget } from "@/components/dashboard/RiskManagerWidget";
 import { TradingHeartbeat } from "@/components/dashboard/TradingHeartbeat";
+import { PortfolioAllocation } from "@/components/dashboard/PortfolioAllocation";
 import { useTradeSignals } from "@/hooks/useTradeSignals";
 
 const Index = () => {
@@ -118,6 +119,7 @@ const Index = () => {
           {/* Right Column - Stats & Info */}
           <div className="space-y-6">
             <WalletPnL />
+            <PortfolioAllocation />
             <RiskManagerWidget />
             <RiskMatrix />
             <ActiveStrategies />
