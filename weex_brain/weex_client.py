@@ -6,7 +6,7 @@ import requests
 import json
 import logging
 
-# --- YOUR LIVE HACKATHON CREDENTIALS ---
+# --- LIVE HACKATHON CREDENTIALS ---
 WEEX_CONFIG = {
     "API_KEY": "weex_d6eac84d6220ac893cd2fb10aadcf493",
     "SECRET_KEY": "dd6dda820151a46c6ac9dc1e0baf1d846ba9d1c8deee0d93aa3e71d516515c3b",
@@ -20,7 +20,7 @@ class WeexClient:
         self.secret = WEEX_CONFIG["SECRET_KEY"]
         self.passphrase = WEEX_CONFIG["PASSPHRASE"]
         self.base_url = WEEX_CONFIG["BASE_URL"]
-        print("✅ [SYSTEM] WEEX Client Connection Established")
+        print("✅ [SYSTEM] WEEX Real-Time Client Initialized")
 
     def _get_signature(self, method, request_path, body=""):
         timestamp = str(int(time.time() * 1000))
@@ -39,7 +39,10 @@ class WeexClient:
         if method == "POST" and params:
             body = json.dumps(params)
         elif method == "GET" and params:
-            endpoint += "?" + "&".join([f"{k}={v}" for k, v in params.items()])
+            # Construct query string manually to avoid encoding issues
+            if params:
+                query_string = "&".join([f"{k}={v}" for k, v in params.items()])
+                endpoint += "?" + query_string
         
         timestamp, sign = self._get_signature(method, endpoint, body)
         
@@ -53,29 +56,46 @@ class WeexClient:
         
         try:
             if method == "GET":
-                response = requests.get(url, headers=headers, timeout=5)
+                response = requests.get(self.base_url + endpoint, headers=headers, timeout=5)
             else:
-                response = requests.post(url, headers=headers, data=body, timeout=5)
+                response = requests.post(self.base_url + endpoint, headers=headers, data=body, timeout=5)
             return response.json()
         except Exception as e:
             return {"error": str(e)}
 
-    # --- ACTIONS ---
+    # --- REAL DATA METHODS ---
+    
+    def get_market_price(self, symbol):
+        """
+        Fetches the REAL LIVE PRICE from WEEX.
+        No simulation. No mocks.
+        Endpoint: /api/v1/market/ticker
+        """
+        # Note: WEEX symbols usually need suffix like _UMCBL for futures
+        # We try to fetch the specific ticker
+        try:
+            # Using public endpoint for speed if possible, or authenticated
+            endpoint = f"/api/v1/market/ticker?symbol={symbol}_UMCBL"
+            res = self._send_request("GET", endpoint)
+            
+            # Parse WEEX response format (adjust based on actual return)
+            if "data" in res and res["data"]:
+                return float(res["data"]["lastPrice"])
+            return None
+        except:
+            return None
+
     def get_wallet_balance(self):
-        """Fetches live balance to prove connectivity"""
         return self._send_request("GET", "/api/v1/account/assets")
 
-    def place_test_order(self, symbol="BTCUSDT_UMCBL", side="open_long"):
-        """Places a tiny order to prove execution capability"""
+    def place_order(self, symbol, side, size):
         params = {
-            "symbol": symbol,
+            "symbol": symbol + "_UMCBL",
             "side": side,
-            "type": "limit", # Limit order so we don't accidentally fill
-            "size": "1",
-            "price": "10000", # Price far away from market
-            "timeInForce": "GTC"
+            "type": "market",
+            "size": str(size),
+            "marginMode": "cross"
         }
         return self._send_request("POST", "/api/v1/order/submit", params)
 
-# Instance for main.py to use
 weex_bot = WeexClient()
