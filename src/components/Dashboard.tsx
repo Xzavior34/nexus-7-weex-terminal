@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { LineChart, Line, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Terminal, Shield, Wallet, Pause, Trash2, Zap, Wifi, Cpu } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AreaChart, Area, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { Terminal, Shield, Wallet, Zap, Activity, Lock, Cpu, Wifi } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 // --- TYPES ---
 type LogType = 'AI_SCAN' | 'WEEX_API' | 'RISK_CHECK' | 'OPPORTUNITY' | 'EXECUTION';
@@ -13,90 +13,109 @@ interface LogMessage {
   message: string;
 }
 
-// --- VISUAL CHART DATA ---
-// Keeps the "flowing" chart look active
-const sparklineData = Array.from({ length: 40 }, (_, i) => ({
-  value: 50 + Math.random() * 30
+// --- VISUAL CHART DATA (Flowing Effect) ---
+const initialSparkline = Array.from({ length: 40 }, (_, i) => ({
+  value: 100 + Math.random() * 20
 }));
 
-const portfolioData = [
-  { name: 'BTC', value: 30, color: '#f7931a' },
-  { name: 'SOL', value: 40, color: '#00ff9d' },
-  { name: 'ETH', value: 15, color: '#627eea' },
-  { name: 'DOGE', value: 15, color: '#fbcd17' },
-];
-
 // --- COMPONENTS ---
-const StatusBadge = ({ icon: Icon, label, active = true }: { icon: any, label: string, active?: boolean }) => (
+const StatusBadge = ({ icon: Icon, label, active = true, color = "green" }: any) => (
   <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${
-    active ? 'bg-[#00ff9d]/10 border-[#00ff9d]/20 text-[#00ff9d]' : 'bg-red-500/10 border-red-500/30 text-red-400'
-  } text-xs font-mono backdrop-blur-md shadow-[0_0_10px_rgba(0,255,157,0.1)]`}>
+    active 
+      ? `bg-${color}-500/10 border-${color}-500/20 text-${color}-400` 
+      : 'bg-red-500/10 border-red-500/30 text-red-400'
+  } text-[10px] font-mono backdrop-blur-md shadow-lg`}>
     <Icon size={12} className={active ? "animate-pulse" : ""} />
     <span>{label}</span>
   </div>
 );
 
-// 🔥 RESTORED: DEEP BLACK GLASS CARDS
-const MarketCard = ({ symbol, price, change, isPositive, isGlow }: { symbol: string, price: string, change: string, isPositive: boolean, isGlow?: boolean }) => (
+// 🔥 GLASSBOX MARKET CARD (With Glowing Area Chart)
+const MarketCard = ({ symbol, price, change, isPositive, data }: any) => (
   <motion.div 
-    initial={{ opacity: 0, scale: 0.95 }}
-    animate={{ opacity: 1, scale: 1 }}
-    // REMOVED GREY BORDERS, ADDED DEEP BLACK GLASS
-    className={`relative overflow-hidden rounded-xl p-5 backdrop-blur-xl transition-all h-48 flex flex-col justify-between group
-      ${isGlow 
-        ? 'bg-black border border-[#00ff9d]/50 shadow-[0_0_30px_rgba(0,255,157,0.15)]' 
-        : 'bg-white/5 border border-white/5 hover:border-white/20'
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    className={`relative overflow-hidden rounded-2xl p-6 backdrop-blur-xl h-48 flex flex-col justify-between group
+      ${isPositive 
+        ? 'bg-gradient-to-br from-[#050505] to-[#0a0a0a] border border-[#00ff9d]/20 shadow-[0_0_20px_rgba(0,255,157,0.05)]' 
+        : 'bg-black border border-white/5'
       }`}
   >
-    {/* Chart in Background */}
-    <div className="absolute inset-x-0 bottom-0 h-32 opacity-30 group-hover:opacity-50 transition-opacity">
+    {/* Chart Background */}
+    <div className="absolute inset-x-0 bottom-0 h-32 opacity-20 group-hover:opacity-40 transition-opacity duration-500">
        <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={sparklineData}>
-          <Line 
+        <AreaChart data={data}>
+          <defs>
+            <linearGradient id={`gradient-${symbol}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={isPositive ? "#00ff9d" : "#ff3b30"} stopOpacity={0.3}/>
+              <stop offset="95%" stopColor={isPositive ? "#00ff9d" : "#ff3b30"} stopOpacity={0}/>
+            </linearGradient>
+          </defs>
+          <Area 
             type="monotone" 
             dataKey="value" 
             stroke={isPositive ? "#00ff9d" : "#ff3b30"} 
-            strokeWidth={3} 
-            dot={false} 
+            strokeWidth={2} 
+            fill={`url(#gradient-${symbol})`} 
           />
-        </LineChart>
+        </AreaChart>
       </ResponsiveContainer>
     </div>
 
-    {/* Subtle Gradient for Depth */}
-    <div className={`absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80`} />
-
+    {/* Content */}
     <div className="relative z-10 flex justify-between items-start">
       <div>
-        <h3 className="text-gray-400 text-xs font-bold tracking-widest mb-1">{symbol}</h3>
-        <div className="text-3xl font-mono font-bold text-white tracking-tighter drop-shadow-lg">{price}</div>
+        <div className="flex items-center gap-2 mb-1">
+          <div className={`w-1.5 h-1.5 rounded-full ${isPositive ? 'bg-[#00ff9d] animate-pulse' : 'bg-red-500'}`} />
+          <h3 className="text-gray-400 text-xs font-bold tracking-widest">{symbol}</h3>
+        </div>
+        <div className="text-3xl font-mono font-bold text-white tracking-tighter drop-shadow-md">{price}</div>
       </div>
-      <div className={`text-xs font-bold px-2 py-1 rounded border ${isPositive ? 'bg-[#00ff9d]/10 border-[#00ff9d]/20 text-[#00ff9d]' : 'bg-red-500/10 border-red-500/20 text-[#ff3b30]'}`}>
+      <div className={`text-xs font-bold px-2 py-1 rounded border ${
+        isPositive ? 'bg-[#00ff9d]/10 border-[#00ff9d]/20 text-[#00ff9d]' : 'bg-red-500/10 border-red-500/20 text-[#ff3b30]'
+      }`}>
         {change}
       </div>
-    </div>
-    
-    <div className="relative z-10 text-[10px] text-gray-500 font-mono uppercase tracking-widest mt-auto flex items-center gap-2">
-      <div className={`w-1.5 h-1.5 rounded-full ${isPositive ? 'bg-[#00ff9d] animate-pulse' : 'bg-red-500'}`} />
-      Live Feed
     </div>
   </motion.div>
 );
 
 export default function Dashboard() {
   const [logs, setLogs] = useState<LogMessage[]>([]);
-  const [isAutoScroll, setIsAutoScroll] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [chartData, setChartData] = useState(initialSparkline);
 
-  // --- REAL-TIME PRICES STATE ---
-  const [solPrice, setSolPrice] = useState(134.10); 
-  const [btcPrice, setBtcPrice] = useState(89793.69);
-  const [ethPrice, setEthPrice] = useState(3101.76);
-  const [dogePrice, setDogePrice] = useState(0.1397);
+  // --- 💰 WALLET DATA (READY FOR D-DAY) ---
+  // To use real data, you will just update these variables via WebSocket later.
+  const [wallet, setWallet] = useState({
+    total: 25847.50,
+    available: 18420.30,
+    inPositions: 7427.20,
+    unrealizedPnL: 124.65,
+    pnlPercent: 0.48
+  });
 
+  // --- REAL-TIME PRICES ---
+  const [prices, setPrices] = useState({
+    SOL: { price: 147.30, change: "+0.75%" },
+    BTC: { price: 67445.71, change: "+0.04%" },
+    ETH: { price: 3450.12, change: "-0.87%" }
+  });
+
+  // --- ANIMATE CHART ---
   useEffect(() => {
-    // ✅ REAL CONNECTION
+    const interval = setInterval(() => {
+      setChartData(prev => {
+        const newVal = prev[prev.length - 1].value + (Math.random() - 0.5) * 5;
+        return [...prev.slice(1), { value: newVal }];
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // --- WEBSOCKET CONNECTION ---
+  useEffect(() => {
     const wsUrl = "wss://nexus-7-weex-terminal.onrender.com/ws/stream"; 
     const ws = new WebSocket(wsUrl);
 
@@ -109,12 +128,18 @@ export default function Dashboard() {
       try {
         const data = JSON.parse(event.data);
         addLog(data.type, data.message);
+        
+        // ⚡ D-DAY HOOK: If the backend sends 'wallet_update', we update the state here.
+        // if (data.type === 'WALLET_UPDATE') setWallet(data.payload);
+
         if (data.price) {
-            const sym = data.symbol.replace("/", "").replace("_", "");
-            if (sym.includes("SOL")) setSolPrice(data.price);
-            if (sym.includes("BTC")) setBtcPrice(data.price);
-            if (sym.includes("ETH")) setEthPrice(data.price);
-            if (sym.includes("DOGE")) setDogePrice(data.price);
+            const sym = data.symbol.replace("USDT", "");
+            if (prices[sym as keyof typeof prices]) {
+              setPrices(prev => ({
+                ...prev,
+                [sym]: { ...prev[sym as keyof typeof prices], price: data.price }
+              }));
+            }
         }
       } catch (e) { }
     };
@@ -128,10 +153,10 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    if (isAutoScroll && scrollRef.current) {
+    if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [logs, isAutoScroll]);
+  }, [logs]);
 
   const addLog = (type: string, message: string) => {
     const newLog: LogMessage = {
@@ -140,139 +165,135 @@ export default function Dashboard() {
       type: type as LogType,
       message
     };
-    setLogs(prev => [...prev.slice(-49), newLog]);
-  };
-
-  const getLogStyle = (type: LogType) => {
-    switch (type) {
-      case 'AI_SCAN': return 'text-purple-400';
-      case 'WEEX_API': return 'text-blue-400';
-      case 'RISK_CHECK': return 'text-yellow-400';
-      case 'EXECUTION': return 'text-[#00ff9d] font-bold';
-      case 'OPPORTUNITY': return 'text-pink-400';
-      default: return 'text-gray-400';
-    }
+    setLogs(prev => [...prev.slice(-14), newLog]); // Keep last 15 logs only
   };
 
   return (
-    // 🔥 REMOVED GRAIN BACKGROUND. RESTORED DEEP BLACK GRADIENT.
-    <div className="min-h-screen bg-[#050505] bg-gradient-to-b from-black via-[#0a0a0a] to-[#050505] text-white font-sans selection:bg-[#00ff9d] selection:text-black pb-10">
+    <div className="min-h-screen bg-[#020202] text-white font-sans selection:bg-[#00ff9d] selection:text-black pb-10 overflow-hidden">
       
-      {/* HEADER */}
-      <header className="border-b border-white/5 bg-black/50 backdrop-blur-xl sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={`w-2.5 h-2.5 rounded-full shadow-[0_0_15px] ${isConnected ? 'bg-[#00ff9d] shadow-[#00ff9d]' : 'bg-red-500 shadow-red-500'}`} />
-            <h1 className="font-bold tracking-wider text-xl">NEXUS-7 <span className="text-gray-500 text-xs font-normal ml-2 font-mono">v2.1 FINAL</span></h1>
+      {/* 🟢 TOP NAV */}
+      <header className="border-b border-white/5 bg-black/40 backdrop-blur-md sticky top-0 z-50">
+        <div className="max-w-[1600px] mx-auto px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Activity className="text-[#00ff9d]" size={18} />
+            <h1 className="font-bold tracking-widest text-lg">NEXUS-7 <span className="text-gray-600 text-xs font-mono ml-2">GlassBox Terminal</span></h1>
           </div>
           
           <div className="flex gap-3">
-            <StatusBadge icon={Wifi} label={isConnected ? "API: 25ms" : "API: OFF"} active={isConnected} />
-            <StatusBadge icon={Cpu} label="AI: HUNTER" />
+            <StatusBadge icon={Wifi} label={isConnected ? "WEEX API: CONNECTED" : "WEEX API: OFF"} active={isConnected} color="green" />
+            <StatusBadge icon={Cpu} label="AI ENGINE: ONLINE" color="purple" />
+            <StatusBadge icon={Shield} label="RISK GUARD: ACTIVE" color="yellow" />
           </div>
         </div>
-        <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-[#00ff9d]/30 to-transparent" />
       </header>
 
-      {/* MAIN CONTENT */}
-      <main className="max-w-7xl mx-auto px-4 pt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* 🟢 MAIN GRID */}
+      <main className="max-w-[1600px] mx-auto px-6 pt-6 grid grid-cols-12 gap-6">
         
-        {/* LEFT COLUMN */}
-        <div className="space-y-8">
-          <section className="grid grid-cols-2 gap-4">
-            <MarketCard symbol="BTC/USDT" price={`$${btcPrice.toLocaleString()}`} change="+0.4%" isPositive={true} />
-            <MarketCard symbol="SOL/USDT" price={`$${solPrice.toFixed(2)}`} change="+8.01%" isPositive={true} isGlow={true} />
-            <MarketCard symbol="ETH/USDT" price={`$${ethPrice.toLocaleString()}`} change="-0.4%" isPositive={false} />
-            <MarketCard symbol="DOGE/USDT" price={`$${dogePrice.toFixed(4)}`} change="+12.5%" isPositive={true} />
-          </section>
+        {/* LEFT: MARKET OVERVIEW (Col-span-8) */}
+        <div className="col-span-12 lg:col-span-8 space-y-6">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-mono text-gray-400 uppercase tracking-widest flex items-center gap-2">
+              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> Live Markets
+            </h2>
+          </div>
 
-          {/* Wallet Widget - CLEAN BLACK LOOK */}
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-black/40 border border-white/5 rounded-xl p-6 backdrop-blur-md relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-40 h-40 bg-[#00ff9d]/5 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"/>
-            
-            <div className="flex items-center gap-2 mb-4 text-gray-400 uppercase text-xs tracking-widest font-bold">
-              <Wallet size={14} /> Wallet & PnL
-            </div>
-            <div className="mb-6">
-              <div className="text-4xl font-mono font-bold tracking-tighter text-white">$25,847.50</div>
-              <div className="text-[#00ff9d] text-sm font-mono mt-1 font-bold shadow-green-500/20">+$1,240.65 (Active)</div>
-            </div>
-            
-            <div className="h-28 w-full flex items-center gap-6">
-               <div className="h-24 w-24 relative">
-                 <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={portfolioData} innerRadius={30} outerRadius={40} paddingAngle={5} dataKey="value" stroke="none">
-                        {portfolioData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                 </ResponsiveContainer>
-                 <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-gray-500">
-                    HODL
-                 </div>
-               </div>
-               <div className="text-xs text-gray-400 space-y-2 font-mono">
-                 <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-[#f7931a]"/> BTC 30%</div>
-                 <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-[#00ff9d] shadow-[0_0_8px_#00ff9d]"/> SOL 40%</div>
-               </div>
-            </div>
-          </motion.div>
-        </div>
+          <div className="grid grid-cols-2 gap-6">
+            <MarketCard symbol="BTC" price={`$${prices.BTC.price.toLocaleString()}`} change={prices.BTC.change} isPositive={true} data={chartData} />
+            <MarketCard symbol="SOL" price={`$${prices.SOL.price.toLocaleString()}`} change={prices.SOL.change} isPositive={true} data={chartData} />
+          </div>
 
-        {/* RIGHT COLUMN (TERMINAL) */}
-        <div className="lg:col-span-2 space-y-6">
-          
-          <div className="bg-black border border-white/10 rounded-xl overflow-hidden shadow-2xl h-[500px] flex flex-col relative group">
-            {/* Terminal Glow Line */}
-            <div className="absolute top-0 w-full h-[1px] bg-gradient-to-r from-transparent via-[#00ff9d]/50 to-transparent opacity-50" />
-            
-            <div className="flex items-center justify-between px-4 py-3 bg-white/5 border-b border-white/5">
+          {/* TERMINAL LOGS */}
+          <div className="bg-black border border-white/10 rounded-2xl overflow-hidden shadow-2xl h-[400px] flex flex-col relative">
+            <div className="absolute top-0 w-full h-[1px] bg-gradient-to-r from-transparent via-[#00ff9d]/50 to-transparent" />
+            <div className="flex items-center justify-between px-5 py-3 bg-white/5 border-b border-white/5">
               <div className="flex items-center gap-2">
                 <Terminal size={14} className="text-[#00ff9d]" />
-                <span className="text-xs font-mono text-[#00ff9d] tracking-widest uppercase shadow-[#00ff9d]">AI Logic Stream • Live</span>
-              </div>
-              <div className="flex gap-2">
-                <Pause size={14} className="text-gray-500 hover:text-white cursor-pointer" onClick={() => setIsAutoScroll(!isAutoScroll)}/>
-                <Trash2 size={14} className="text-gray-500 hover:text-white cursor-pointer" onClick={() => setLogs([])}/>
+                <span className="text-xs font-mono text-[#00ff9d] tracking-widest uppercase shadow-[#00ff9d]">AI Logic Stream</span>
               </div>
             </div>
 
-            <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 font-mono text-xs leading-loose space-y-1 scrollbar-hide bg-black/50">
-              {logs.length === 0 && (
-                <div className="text-gray-700 italic text-center mt-40">Initialize Neural Handshake...</div>
-              )}
+            <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 font-mono text-[11px] leading-relaxed space-y-2 scrollbar-hide">
               {logs.map((log) => (
-                <div key={log.id} className="flex gap-4 hover:bg-white/5 px-2 rounded py-0.5 border-l-2 border-transparent hover:border-[#00ff9d]/50 transition-colors">
-                  <span className="text-gray-600 opacity-50 min-w-[60px]">{log.timestamp}</span>
-                  <span className={`font-bold tracking-tight min-w-[90px] ${getLogStyle(log.type)}`}>
-                    [{log.type}]
-                  </span>
+                <div key={log.id} className="flex gap-3 border-l-2 border-transparent hover:border-[#00ff9d] pl-2 transition-all opacity-80 hover:opacity-100">
+                  <span className="text-gray-600">{log.timestamp}</span>
+                  <span className={`font-bold ${
+                    log.type === 'EXECUTION' ? 'text-[#00ff9d]' : 
+                    log.type === 'RISK_CHECK' ? 'text-yellow-500' : 'text-purple-400'
+                  }`}>[{log.type}]</span>
                   <span className="text-gray-300">{log.message}</span>
                 </div>
               ))}
             </div>
           </div>
+        </div>
 
-          <div className="grid grid-cols-2 gap-6">
-            <div className="bg-black/40 border border-white/10 rounded-xl p-5 relative overflow-hidden">
-               <div className="flex justify-between items-start mb-2">
-                  <div className="text-xs text-gray-500 uppercase tracking-widest font-bold">Risk Guard</div>
-                  <Shield size={16} className="text-yellow-500" />
-               </div>
-               <div className="text-3xl font-mono font-bold text-white">8x</div>
-               <div className="w-full bg-white/10 h-1.5 mt-3 rounded-full overflow-hidden">
-                 <div className="bg-yellow-500 h-full w-3/5 rounded-full shadow-[0_0_10px_orange]" />
-               </div>
+        {/* RIGHT: WALLET & POSITIONS (Col-span-4) */}
+        <div className="col-span-12 lg:col-span-4 space-y-6">
+          
+          {/* 💰 PRO WALLET CARD */}
+          <div className="bg-[#0a0a0a] border border-white/10 rounded-2xl p-6 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-[#00ff9d]/10 rounded-full blur-3xl -mr-10 -mt-10 group-hover:bg-[#00ff9d]/20 transition-all"/>
+            
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                 <div className="text-gray-500 text-xs font-bold uppercase tracking-widest mb-1">Total Balance</div>
+                 <div className="text-4xl font-mono font-bold text-white tracking-tight">${wallet.total.toLocaleString()}</div>
+              </div>
+              <div className="text-right">
+                <div className="bg-[#00ff9d]/10 text-[#00ff9d] text-xs font-bold px-2 py-1 rounded border border-[#00ff9d]/20">
+                  +{wallet.pnlPercent}%
+                </div>
+              </div>
             </div>
 
-            <div className="bg-[#00ff9d]/5 border border-[#00ff9d]/20 rounded-xl p-5 flex flex-col justify-center items-center text-center relative overflow-hidden">
-              <div className="absolute inset-0 bg-[#00ff9d]/5 blur-xl"></div>
-              <div className="relative z-10 text-[#00ff9d] font-bold text-sm tracking-wider flex items-center gap-2">
-                <Zap size={16} className="animate-pulse" /> ACTIVE
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="bg-black/40 rounded-lg p-3 border border-white/5">
+                <div className="text-gray-500 text-[10px] uppercase">Available</div>
+                <div className="text-lg font-mono text-white">${wallet.available.toLocaleString()}</div>
               </div>
-              <div className="relative z-10 text-xs text-[#00ff9d]/70 mt-1 font-mono">Strategy: Momentum / Volatility</div>
+              <div className="bg-black/40 rounded-lg p-3 border border-white/5">
+                <div className="text-gray-500 text-[10px] uppercase">In Positions</div>
+                <div className="text-lg font-mono text-white">${wallet.inPositions.toLocaleString()}</div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="text-gray-500 text-[10px] uppercase font-bold tracking-widest border-b border-white/5 pb-2">Open Positions (3)</div>
+              
+              <div className="flex justify-between items-center text-xs font-mono">
+                <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-orange-500 rounded-full"/> BTC/USDT</div>
+                <div className="text-[#00ff9d]">+0.93%</div>
+              </div>
+              <div className="flex justify-between items-center text-xs font-mono">
+                <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-green-500 rounded-full"/> SOL/USDT</div>
+                <div className="text-[#00ff9d]">+1.88%</div>
+              </div>
+              <div className="flex justify-between items-center text-xs font-mono">
+                <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-blue-500 rounded-full"/> ETH/USDT</div>
+                <div className="text-red-400">-0.87%</div>
+              </div>
+            </div>
+          </div>
+
+          {/* RISK MANAGER CARD */}
+          <div className="bg-black border border-white/10 rounded-2xl p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Shield size={16} className="text-yellow-500" />
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Risk Manager</span>
+            </div>
+            
+            <div className="flex justify-between items-end mb-2">
+               <span className="text-3xl font-mono font-bold text-white">8x</span>
+               <span className="text-xs text-yellow-500 border border-yellow-500/20 bg-yellow-500/10 px-2 py-1 rounded">Competition Safe</span>
+            </div>
+            
+            <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+               <div className="bg-yellow-500 h-full w-2/5 rounded-full shadow-[0_0_10px_orange]" />
+            </div>
+            <div className="flex justify-between mt-2 text-[10px] text-gray-600 font-mono">
+              <span>1x</span>
+              <span>20x (Cap)</span>
             </div>
           </div>
 
