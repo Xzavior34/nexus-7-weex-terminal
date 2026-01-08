@@ -261,7 +261,7 @@ export default function Dashboard() {
                   <div className="text-xs text-gray-500 uppercase tracking-widest font-bold">Risk Guard</div>
                   <Shield size={16} className="text-yellow-500" />
                </div>
-               <div className="text-3xl font-mono font-bold text-white">12x</div>
+               <div className="text-3xl font-mono font-bold text-white">8x</div>
                <div className="w-full bg-white/10 h-1.5 mt-3 rounded-full overflow-hidden">
                  <div className="bg-yellow-500 h-full w-3/5 rounded-full shadow-[0_0_10px_orange]" />
                </div>
