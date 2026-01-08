@@ -34,10 +34,9 @@ active_positions = {}
 
 app = FastAPI()
 
-# 🏥 CRITICAL UPTIME FIX: The "Health Check"
-# This tells UptimeRobot (and the Judges) that the server is ALIVE.
-# It handles both GET and HEAD requests automatically.
-@app.get("/")
+# 🏥 CRITICAL UPTIME FIX: Explicitly Allow HEAD & GET
+# This fixes the "405 Method Not Allowed" error on UptimeRobot.
+@app.api_route("/", methods=["GET", "HEAD"])
 def health_check():
     return {"status": "active", "system": "Nexus-7 Online", "version": "2.1-FINAL"}
 
