@@ -34,6 +34,12 @@ active_positions = {}
 
 app = FastAPI()
 
+# 🏥 CRITICAL UPTIME FIX: The "Health Check"
+# This tells UptimeRobot that the server is ALIVE.
+@app.get("/")
+def health_check():
+    return {"status": "active", "system": "Nexus-7 Online", "version": "2.1-FINAL"}
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -52,6 +58,12 @@ def save_ai_log(symbol, action, confidence, price, reason):
             writer.writerow([datetime.utcnow().isoformat(), symbol, action, confidence, price, reason])
     except:
         pass
+
+@app.get("/download-logs")
+def download_logs():
+    if os.path.exists(LOG_FILE):
+        return FileResponse(LOG_FILE, media_type='text/csv', filename="ai_trading_logs.csv")
+    return {"error": "No trades generated yet."}
 
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
@@ -111,7 +123,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 deviation = (current_price - sma) / sma
                 
                 # LOGIC: If price pumps 0.15% above average, it's a breakout.
-                # We increased the threshold to 0.15% to be safer (fewer fake trades).
                 if deviation > 0.0015: 
                     sentiment = "BULLISH"
                     confidence = 85 + int(deviation * 10000)
