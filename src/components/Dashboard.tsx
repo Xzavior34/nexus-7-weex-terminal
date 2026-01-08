@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AreaChart, Area, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 import { Terminal, Shield, Wallet, Zap, Activity, Lock, Cpu, Wifi } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -35,14 +35,14 @@ const MarketCard = ({ symbol, price, change, isPositive, data }: any) => (
   <motion.div 
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
-    className={`relative overflow-hidden rounded-2xl p-6 backdrop-blur-xl h-48 flex flex-col justify-between group
+    className={`relative overflow-hidden rounded-2xl p-6 backdrop-blur-xl h-44 flex flex-col justify-between group
       ${isPositive 
         ? 'bg-gradient-to-br from-[#050505] to-[#0a0a0a] border border-[#00ff9d]/20 shadow-[0_0_20px_rgba(0,255,157,0.05)]' 
         : 'bg-black border border-white/5'
       }`}
   >
     {/* Chart Background */}
-    <div className="absolute inset-x-0 bottom-0 h-32 opacity-20 group-hover:opacity-40 transition-opacity duration-500">
+    <div className="absolute inset-x-0 bottom-0 h-28 opacity-20 group-hover:opacity-40 transition-opacity duration-500">
        <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data}>
           <defs>
@@ -69,9 +69,9 @@ const MarketCard = ({ symbol, price, change, isPositive, data }: any) => (
           <div className={`w-1.5 h-1.5 rounded-full ${isPositive ? 'bg-[#00ff9d] animate-pulse' : 'bg-red-500'}`} />
           <h3 className="text-gray-400 text-xs font-bold tracking-widest">{symbol}</h3>
         </div>
-        <div className="text-3xl font-mono font-bold text-white tracking-tighter drop-shadow-md">{price}</div>
+        <div className="text-2xl font-mono font-bold text-white tracking-tighter drop-shadow-md">{price}</div>
       </div>
-      <div className={`text-xs font-bold px-2 py-1 rounded border ${
+      <div className={`text-[10px] font-bold px-2 py-1 rounded border ${
         isPositive ? 'bg-[#00ff9d]/10 border-[#00ff9d]/20 text-[#00ff9d]' : 'bg-red-500/10 border-red-500/20 text-[#ff3b30]'
       }`}>
         {change}
@@ -86,8 +86,7 @@ export default function Dashboard() {
   const [isConnected, setIsConnected] = useState(false);
   const [chartData, setChartData] = useState(initialSparkline);
 
-  // --- 💰 WALLET DATA (READY FOR D-DAY) ---
-  // To use real data, you will just update these variables via WebSocket later.
+  // --- 💰 WALLET DATA (D-DAY SWITCH READY) ---
   const [wallet, setWallet] = useState({
     total: 25847.50,
     available: 18420.30,
@@ -96,11 +95,13 @@ export default function Dashboard() {
     pnlPercent: 0.48
   });
 
-  // --- REAL-TIME PRICES ---
+  // --- REAL-TIME PRICES STATE ---
+  // "Start" is used to calculate the dynamic percentage change
   const [prices, setPrices] = useState({
-    SOL: { price: 147.30, change: "+0.75%" },
-    BTC: { price: 67445.71, change: "+0.04%" },
-    ETH: { price: 3450.12, change: "-0.87%" }
+    SOL: { price: 138.64, change: "+0.75%", start: 136.00 }, 
+    BTC: { price: 91207.30, change: "+0.04%", start: 90800.00 },
+    ETH: { price: 3118.00, change: "-0.87%", start: 3150.00 },
+    DOGE: { price: 0.1425, change: "+12.5%", start: 0.1300 } 
   });
 
   // --- ANIMATE CHART ---
@@ -129,16 +130,29 @@ export default function Dashboard() {
         const data = JSON.parse(event.data);
         addLog(data.type, data.message);
         
-        // ⚡ D-DAY HOOK: If the backend sends 'wallet_update', we update the state here.
-        // if (data.type === 'WALLET_UPDATE') setWallet(data.payload);
-
+        // ⚡ DYNAMIC PRICE & PERCENTAGE UPDATE ⚡
         if (data.price) {
             const sym = data.symbol.replace("USDT", "");
+            
+            // Check if we track this symbol
             if (prices[sym as keyof typeof prices]) {
-              setPrices(prev => ({
-                ...prev,
-                [sym]: { ...prev[sym as keyof typeof prices], price: data.price }
-              }));
+              setPrices(prev => {
+                const coinKey = sym as keyof typeof prev;
+                const oldData = prev[coinKey];
+                
+                // MATH: ((NewPrice - StartPrice) / StartPrice) * 100
+                const percentChange = ((data.price - oldData.start) / oldData.start) * 100;
+                const sign = percentChange >= 0 ? "+" : "";
+                
+                return {
+                  ...prev,
+                  [coinKey]: {
+                    ...oldData,
+                    price: data.price, // Update Price
+                    change: `${sign}${percentChange.toFixed(2)}%` // Update Percentage
+                  }
+                };
+              });
             }
         }
       } catch (e) { }
@@ -165,7 +179,7 @@ export default function Dashboard() {
       type: type as LogType,
       message
     };
-    setLogs(prev => [...prev.slice(-14), newLog]); // Keep last 15 logs only
+    setLogs(prev => [...prev.slice(-14), newLog]); 
   };
 
   return (
@@ -198,9 +212,12 @@ export default function Dashboard() {
             </h2>
           </div>
 
-          <div className="grid grid-cols-2 gap-6">
-            <MarketCard symbol="BTC" price={`$${prices.BTC.price.toLocaleString()}`} change={prices.BTC.change} isPositive={true} data={chartData} />
-            <MarketCard symbol="SOL" price={`$${prices.SOL.price.toLocaleString()}`} change={prices.SOL.change} isPositive={true} data={chartData} />
+          {/* ⚡ 4-GRID LAYOUT (RESTORED) */}
+          <div className="grid grid-cols-2 gap-4">
+            <MarketCard symbol="BTC" price={`$${prices.BTC.price.toLocaleString()}`} change={prices.BTC.change} isPositive={!prices.BTC.change.includes("-")} data={chartData} />
+            <MarketCard symbol="SOL" price={`$${prices.SOL.price.toLocaleString()}`} change={prices.SOL.change} isPositive={!prices.SOL.change.includes("-")} data={chartData} />
+            <MarketCard symbol="ETH" price={`$${prices.ETH.price.toLocaleString()}`} change={prices.ETH.change} isPositive={!prices.ETH.change.includes("-")} data={chartData} />
+            <MarketCard symbol="DOGE" price={`$${prices.DOGE.price.toFixed(4)}`} change={prices.DOGE.change} isPositive={!prices.DOGE.change.includes("-")} data={chartData} />
           </div>
 
           {/* TERMINAL LOGS */}
