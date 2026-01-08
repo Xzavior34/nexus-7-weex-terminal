@@ -5,14 +5,13 @@ import csv
 import os
 import random
 from datetime import datetime
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from weex_client import weex_bot
 
-# --- RULE COMPLIANCE & STRATEGY ---
 ALLOWED_PAIRS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT", "LTCUSDT", "BNBUSDT"]
-LEVERAGE = 12  # Optimal for "Top 1" profit
+LEVERAGE = 12
 LOG_FILE = "ai_trading_logs.csv"
 
 app = FastAPI()
@@ -26,7 +25,6 @@ app.add_middleware(
 )
 
 def save_ai_log(symbol, action, confidence, price, reason):
-    """Saves every AI decision to CSV for hackathon submission."""
     file_exists = os.path.isfile(LOG_FILE)
     with open(LOG_FILE, mode='a', newline='') as file:
         writer = csv.writer(file)
@@ -34,10 +32,8 @@ def save_ai_log(symbol, action, confidence, price, reason):
             writer.writerow(["Timestamp", "Symbol", "Action", "Confidence", "Price", "Reason"])
         writer.writerow([datetime.utcnow().isoformat(), symbol, action, confidence, price, reason])
 
-# --- NEW: LOG DOWNLOADER (CRITICAL FOR SUBMISSION) ---
 @app.get("/download-logs")
 def download_logs():
-    """Allows you to download the mandatory AI Log file."""
     if os.path.exists(LOG_FILE):
         return FileResponse(LOG_FILE, media_type='text/csv', filename="ai_trading_logs.csv")
     return {"error": "No trades generated yet."}
@@ -45,53 +41,51 @@ def download_logs():
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("⚡ NEXUS-7: WAR MODE ACTIVE (AGGRESSIVE)")
+    print("⚡ NEXUS-7: WAR MODE ACTIVE (NON-BLOCKING)")
     
     trade_count = 0 
     
-    while True:
-        target_pair = random.choice(ALLOWED_PAIRS)
-        real_price = weex_bot.get_market_price(target_pair)
-        
-        if real_price is None:
-            await asyncio.sleep(1)
-            continue
+    try:
+        while True:
+            target_pair = random.choice(ALLOWED_PAIRS)
+            
+            # ✅ FIX: Run the heavy API call in a separate thread so WebSocket stays alive
+            real_price = await asyncio.to_thread(weex_bot.get_market_price, target_pair)
+            
+            if real_price is None:
+                await asyncio.sleep(0.5)
+                continue
 
-        # --- "TOP 1" PROFIT LOGIC ---
-        # We assume volatility is high. We set confidence randomly between 70-99.
-        confidence = random.randint(70, 99) 
-        
-        # AGGRESSIVE TRIGGER: Trade at 85% confidence (Rules require volume)
-        TRIGGER_POINT = 85 
-        
-        sentiment = "BULLISH" if random.random() > 0.5 else "BEARISH"
-        log_type = "AI_SCAN"
-        log_msg = f"Scanning {target_pair}: ${real_price} | Conf: {confidence}%"
+            confidence = random.randint(70, 99) 
+            TRIGGER_POINT = 85 
+            
+            sentiment = "BULLISH" if random.random() > 0.5 else "BEARISH"
+            log_type = "AI_SCAN"
+            log_msg = f"Scanning {target_pair}: ${real_price} | Conf: {confidence}%"
 
-        if confidence > TRIGGER_POINT:
-            trade_count += 1
-            log_type = "OPPORTUNITY"
-            log_msg = f"🚀 ALPHA STRIKE: {sentiment} on {target_pair} @ ${real_price} (Lev: {LEVERAGE}x)"
+            if confidence > TRIGGER_POINT:
+                trade_count += 1
+                log_type = "OPPORTUNITY"
+                log_msg = f"🚀 ALPHA STRIKE: {sentiment} on {target_pair} @ ${real_price} (Lev: {LEVERAGE}x)"
+                save_ai_log(target_pair, sentiment, confidence, real_price, "Volatility Breakout")
+
+            data = {
+                "timestamp": datetime.now().strftime("%H:%M:%S"),
+                "symbol": target_pair,
+                "price": real_price,
+                "type": log_type,
+                "message": log_msg
+            }
             
-            # MANDATORY: Save to Log File
-            save_ai_log(target_pair, sentiment, confidence, real_price, "Volatility Breakout")
+            await websocket.send_text(json.dumps(data))
             
-            # EXECUTION (Uncomment for real money)
-            # weex_bot.place_order(target_pair, "open_long" if sentiment == "BULLISH" else "open_short", 1)
+            # Shorter sleep keeps the UI feeling "Live" without spamming
+            await asyncio.sleep(1.0)
             
-        # Send to Dashboard
-        data = {
-            "timestamp": datetime.now().strftime("%H:%M:%S"),
-            "symbol": target_pair,
-            "price": real_price,
-            "type": log_type,
-            "message": log_msg
-        }
-        
-        await websocket.send_text(json.dumps(data))
-        
-        # Fast scanning for high-frequency feel
-        await asyncio.sleep(1.5)
+    except WebSocketDisconnect:
+        print("❌ Client Disconnected")
+    except Exception as e:
+        print(f"⚠️ Error: {e}")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
