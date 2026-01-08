@@ -24,7 +24,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ... (Keep Log Function the same) ...
 def save_ai_log(symbol, action, confidence, price, reason):
     try:
         file_exists = os.path.isfile(LOG_FILE)
@@ -45,25 +44,24 @@ def download_logs():
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("⚡ NEXUS-7: HYBRID FEED ACTIVE")
+    print("⚡ NEXUS-7: COINGECKO FEED ACTIVE")
     
     try:
         while True:
             target_pair = random.choice(ALLOWED_PAIRS)
             
-            # Fetch Price (Now using the Unblockable Feed)
+            # Fetch Price from CoinGecko
             real_price = await asyncio.to_thread(weex_bot.get_market_price, target_pair)
 
             if real_price is None:
-                # If even the backup feed fails, show a specific error
                 await websocket.send_text(json.dumps({
                     "timestamp": datetime.now().strftime("%H:%M:%S"),
                     "symbol": target_pair,
                     "price": 0,
                     "type": "WEEX_API",
-                    "message": "Initializing Data Feed..."
+                    "message": "Fetching Data..."
                 }))
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(2.0)
                 continue 
 
             # AI LOGIC
@@ -88,7 +86,9 @@ async def websocket_endpoint(websocket: WebSocket):
             }
             
             await websocket.send_text(json.dumps(data))
-            await asyncio.sleep(1.5)
+            
+            # 🔥 SLOW DOWN: 3 seconds sleep to be nice to CoinGecko free API
+            await asyncio.sleep(3.0)
             
     except WebSocketDisconnect:
         print("❌ Disconnected")
@@ -97,6 +97,5 @@ async def websocket_endpoint(websocket: WebSocket):
         await asyncio.sleep(1)
 
 if __name__ == "__main__":
-    # 🔥 FIX: Use the 'PORT' environment variable provided by Render
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
