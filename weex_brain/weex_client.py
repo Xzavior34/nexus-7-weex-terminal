@@ -5,12 +5,23 @@ import base64
 import requests
 import json
 
-# --- CONFIGURATION ---
 WEEX_CONFIG = {
     "API_KEY": "weex_d6eac84d6220ac893cd2fb10aadcf493",
     "SECRET_KEY": "dd6dda820151a46c6ac9dc1e0baf1d846ba9d1c8deee0d93aa3e71d516515c3b",
     "PASSPHRASE": "weex0717289",
     "BASE_URL": "https://api-contract.weex.com"
+}
+
+# Map WEEX symbols to CoinGecko IDs
+SYMBOL_MAP = {
+    "BTCUSDT": "bitcoin",
+    "ETHUSDT": "ethereum",
+    "SOLUSDT": "solana",
+    "XRPUSDT": "ripple",
+    "ADAUSDT": "cardano",
+    "DOGEUSDT": "dogecoin",
+    "LTCUSDT": "litecoin",
+    "BNBUSDT": "binancecoin"
 }
 
 class WeexClient:
@@ -20,32 +31,40 @@ class WeexClient:
         self.passphrase = WEEX_CONFIG["PASSPHRASE"]
         self.base_url = WEEX_CONFIG["BASE_URL"]
 
-    # --- UNBLOCKABLE PUBLIC DATA (Via Binance Public Feed) ---
+    # --- PLAN D: COINGECKO FEED (Cloud Friendly) ---
     def get_market_price(self, symbol):
-        """
-        Fetches Real-Time Price from Binance (Unblockable).
-        Symbol format input: 'BTCUSDT' -> automatically handled.
-        """
         try:
-            # Clean the symbol just in case (e.g. remove _UMCBL if present)
-            clean_symbol = symbol.replace("_UMCBL", "").upper()
+            # 1. Clean symbol (BTCUSDT_UMCBL -> BTCUSDT)
+            clean_sym = symbol.replace("_UMCBL", "").upper()
             
-            # Binance Public API (No keys needed, very fast)
-            url = f"https://api.binance.com/api/v3/ticker/price?symbol={clean_symbol}"
+            # 2. Get CoinGecko ID
+            cg_id = SYMBOL_MAP.get(clean_sym)
+            if not cg_id:
+                return None # Unknown symbol
+
+            # 3. Fetch Price (No Keys Needed)
+            url = f"https://api.coingecko.com/api/v3/simple/price?ids={cg_id}&vs_currencies=usd"
             
-            res = requests.get(url, timeout=2)
+            # Add headers to look like a real browser
+            headers = {
+                "User-Agent": "Mozilla/5.0",
+                "Accept": "application/json"
+            }
+            
+            res = requests.get(url, headers=headers, timeout=3)
             data = res.json()
             
-            if "price" in data:
-                return float(data["price"])
+            # 4. Parse Response: {'bitcoin': {'usd': 67000}}
+            if cg_id in data and 'usd' in data[cg_id]:
+                return float(data[cg_id]['usd'])
+            
             return None
-        except Exception:
+            
+        except Exception as e:
+            print(f"CoinGecko Error: {e}")
             return None
 
     # --- TRADING EXECUTION (STILL ON WEEX) ---
-    # These use your API Keys and run only when you place a trade.
-    # They are less likely to be blocked because they are signed requests.
-    
     def _get_signature(self, method, request_path, body=""):
         timestamp = str(int(time.time() * 1000))
         message = timestamp + method.upper() + request_path + body
@@ -65,7 +84,6 @@ class WeexClient:
             "size": str(size),
             "marginMode": "cross"
         }
-        # Simplified Private Request Logic for Order Placement
         endpoint = "/api/v1/order/submit"
         body = json.dumps(params)
         timestamp, sign = self._get_signature("POST", endpoint, body)
