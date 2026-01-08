@@ -4,6 +4,7 @@ import json
 import csv
 import os
 import random
+from collections import deque
 from datetime import datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,11 +12,15 @@ from fastapi.responses import FileResponse
 from weex_client import weex_bot
 
 ALLOWED_PAIRS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT", "LTCUSDT", "BNBUSDT"]
-LEVERAGE = 12
+
+# --- STRATEGY SETTINGS ---
+LEVERAGE = 8          # Lowered from 12x to 8x (Safety buffer increased)
+SMA_PERIOD = 15       # Look at the last 15 price checks (approx 30 seconds of memory)
 LOG_FILE = "ai_trading_logs.csv"
 
-# --- MEMORY BANK (To compare Old vs New Price) ---
-price_memory = {}
+# --- SMART MEMORY BANK ---
+# Stores a list of recent prices for each coin: {'BTCUSDT': [67000, 67005, 67010...]}
+price_history = {pair: deque(maxlen=SMA_PERIOD) for pair in ALLOWED_PAIRS}
 
 app = FastAPI()
 
@@ -47,7 +52,7 @@ def download_logs():
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("⚡ NEXUS-7: SMART MOMENTUM ENGINE ACTIVE")
+    print(f"⚡ NEXUS-7: SMA TREND ENGINE ACTIVE (Lev: {LEVERAGE}x)")
     
     try:
         while True:
@@ -57,50 +62,58 @@ async def websocket_endpoint(websocket: WebSocket):
             current_price = await asyncio.to_thread(weex_bot.get_market_price, target_pair)
 
             if current_price is None:
-                # Use last known if fetch fails
-                current_price = price_memory.get(target_pair, 0)
-                if current_price == 0:
+                # Use last known average if fetch fails, or skip
+                if len(price_history[target_pair]) > 0:
+                    current_price = price_history[target_pair][-1]
+                else:
                     await asyncio.sleep(1.0)
                     continue
 
-            # 2. SMART ANALYSIS (Compare with Memory)
-            old_price = price_memory.get(target_pair, current_price) # Default to current if no memory
-            price_memory[target_pair] = current_price # Update memory for next time
+            # 2. UPDATE MEMORY (Add price to history)
+            price_history[target_pair].append(current_price)
             
-            # Calculate Change
-            price_change = current_price - old_price
-            
-            # LOGIC: If price moved UP, we are BULLISH. If DOWN, we are BEARISH.
-            if price_change > 0:
-                sentiment = "BULLISH"
-                reason = "Upward Momentum"
-                confidence = 80 + int((price_change / current_price) * 10000) # Higher change = Higher confidence
-            elif price_change < 0:
-                sentiment = "BEARISH"
-                reason = "Downward Pressure"
-                confidence = 80 + int(abs((price_change / current_price) * 10000))
+            # 3. CALCULATE SMART TREND (Simple Moving Average)
+            # We need at least 5 data points to make a smart decision
+            if len(price_history[target_pair]) >= 5:
+                history_list = list(price_history[target_pair])
+                sma = sum(history_list) / len(history_list) # Average price
+                
+                # Deviation: How far is current price from the average?
+                deviation = current_price - sma
+                percent_diff = (deviation / sma) * 100
+                
+                # LOGIC: Only trade if price breaks the average by 0.05% (Filters noise)
+                TRIGGER_THRESHOLD = 0.05 
+                
+                if percent_diff > TRIGGER_THRESHOLD:
+                    sentiment = "BULLISH"
+                    reason = f"Price > SMA by {percent_diff:.3f}%"
+                    confidence = 80 + min(int(percent_diff * 500), 19) # Cap at 99
+                elif percent_diff < -TRIGGER_THRESHOLD:
+                    sentiment = "BEARISH"
+                    reason = f"Price < SMA by {percent_diff:.3f}%"
+                    confidence = 80 + min(int(abs(percent_diff) * 500), 19)
+                else:
+                    sentiment = "NEUTRAL"
+                    reason = "Choppy/Sideways"
+                    confidence = 40 # Low confidence = No trade
             else:
-                sentiment = "NEUTRAL"
-                confidence = 50
-                reason = "Stagnant"
+                sentiment = "GATHERING_DATA"
+                confidence = 0
+                reason = "Building Memory..."
 
-            # Cap confidence at 99%
-            if confidence > 99: confidence = 99
-            
             TRIGGER_POINT = 85 
             
             log_type = "AI_SCAN"
             log_msg = f"Analyzed {target_pair}: ${current_price} | Trend: {sentiment}"
 
-            # 3. EXECUTION DECISION
+            # 4. EXECUTION
             if confidence > TRIGGER_POINT and sentiment != "NEUTRAL":
                 log_type = "OPPORTUNITY"
                 log_msg = f"🚀 ALPHA STRIKE: {sentiment} on {target_pair} (Conf: {confidence}%)"
-                
-                # Save the Smart Decision to the Log File
                 save_ai_log(target_pair, sentiment, confidence, current_price, reason)
 
-            # 4. SEND TO FRONTEND
+            # 5. SEND TO FRONTEND
             data = {
                 "timestamp": datetime.now().strftime("%H:%M:%S"),
                 "symbol": target_pair,
@@ -111,7 +124,7 @@ async def websocket_endpoint(websocket: WebSocket):
             
             await websocket.send_text(json.dumps(data))
             
-            # Wait 2 seconds to let the market move slightly
+            # Speed: 2 seconds scan rate
             await asyncio.sleep(2.0)
             
     except WebSocketDisconnect:
