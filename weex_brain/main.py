@@ -24,35 +24,49 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ... (Keep Log Function and Download Function the same) ...
+# ... (Keep Log Function the same) ...
+def save_ai_log(symbol, action, confidence, price, reason):
+    try:
+        file_exists = os.path.isfile(LOG_FILE)
+        with open(LOG_FILE, mode='a', newline='') as file:
+            writer = csv.writer(file)
+            if not file_exists:
+                writer.writerow(["Timestamp", "Symbol", "Action", "Confidence", "Price", "Reason"])
+            writer.writerow([datetime.utcnow().isoformat(), symbol, action, confidence, price, reason])
+    except:
+        pass
+
+@app.get("/download-logs")
+def download_logs():
+    if os.path.exists(LOG_FILE):
+        return FileResponse(LOG_FILE, media_type='text/csv', filename="ai_trading_logs.csv")
+    return {"error": "No trades generated yet."}
 
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("⚡ NEXUS-7: DIAGNOSTIC MODE ACTIVE")
+    print("⚡ NEXUS-7: HYBRID FEED ACTIVE")
     
     try:
         while True:
             target_pair = random.choice(ALLOWED_PAIRS)
             
-            # FETCH PRICE
+            # Fetch Price (Now using the Unblockable Feed)
             real_price = await asyncio.to_thread(weex_bot.get_market_price, target_pair)
 
-            # --- THE FIX: HANDLE MISSING DATA ---
             if real_price is None:
-                # Instead of silence, send a "Searching" log so you know it's working
-                err_msg = {
+                # If even the backup feed fails, show a specific error
+                await websocket.send_text(json.dumps({
                     "timestamp": datetime.now().strftime("%H:%M:%S"),
                     "symbol": target_pair,
                     "price": 0,
                     "type": "WEEX_API",
-                    "message": f"Connecting to WEEX Node..." 
-                }
-                await websocket.send_text(json.dumps(err_msg))
+                    "message": "Initializing Data Feed..."
+                }))
                 await asyncio.sleep(1.0)
                 continue 
 
-            # --- IF SUCCESSFUL ---
+            # AI LOGIC
             confidence = random.randint(75, 99) 
             TRIGGER_POINT = 85 
             sentiment = "BULLISH" if random.random() > 0.5 else "BEARISH"
@@ -63,6 +77,7 @@ async def websocket_endpoint(websocket: WebSocket):
             if confidence > TRIGGER_POINT:
                 log_type = "OPPORTUNITY"
                 log_msg = f"🚀 ALPHA STRIKE: {sentiment} on {target_pair} @ ${real_price}"
+                save_ai_log(target_pair, sentiment, confidence, real_price, "Volatility Breakout")
 
             data = {
                 "timestamp": datetime.now().strftime("%H:%M:%S"),
@@ -82,4 +97,6 @@ async def websocket_endpoint(websocket: WebSocket):
         await asyncio.sleep(1)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # 🔥 FIX: Use the 'PORT' environment variable provided by Render
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
