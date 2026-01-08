@@ -3,8 +3,11 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index";
+// import Index from "./pages/Index";  <-- DELETE or COMMENT OUT this line
 import NotFound from "./pages/NotFound";
+
+// ✅ IMPORT YOUR NEW DASHBOARD FILE
+import Dashboard from "./components/Dashboard";
 
 const queryClient = new QueryClient();
 
@@ -15,7 +18,9 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Index />} />
+          {/* ✅ CHANGE THIS LINE: Point the "/" route to your Dashboard */}
+          <Route path="/" element={<Dashboard />} />
+          
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
