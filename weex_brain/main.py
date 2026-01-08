@@ -12,19 +12,25 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from weex_client import weex_bot
 
-# ✅ SAFE & VOLATILE MIX
-ALLOWED_PAIRS = ["SOLUSDT", "DOGEUSDT", "XRPUSDT", "SUIUSDT", "BTCUSDT"]
+# ✅ APPROVED "HIGH BETA" MAJORS (No Meme Coins)
+# 1. SOL: Moves fast, very liquid.
+# 2. DOGE: The only "safe" volatile coin (Top 10).
+# 3. SUI: High volatility Layer 1 (Professional).
+# 4. XRP: Moves independently from BTC.
+# 5. BTC: The backup anchor.
+ALLOWED_PAIRS = ["SOLUSDT", "DOGEUSDT", "SUIUSDT", "XRPUSDT", "BTCUSDT"]
 
-# --- 🛡️ SAFETY SETTINGS ---
-LEVERAGE = 8             # High enough to win
-STOP_LOSS_PCT = 0.02     # If price drops 2%, SELL. (Prevents liquidation)
-TAKE_PROFIT_PCT = 0.04   # If price rises 4%, SELL. (Locks in money)
+# --- 🛡️ PROFESSIONAL RISK MANAGEMENT ---
+# These settings are tuned to "Preserve Capital" while "Hunting Profit"
+LEVERAGE = 8             # 8x is the limit for aggressive/safe.
+STOP_LOSS_PCT = 0.02     # SAFETY: Sell if down 2% (Prevents disaster).
+TAKE_PROFIT_PCT = 0.045  # GREED: Sell if up 4.5% (Banks the win).
 
 HISTORY_SIZE = 30
 LOG_FILE = "ai_trading_logs.csv"
 
 price_history = {pair: deque(maxlen=HISTORY_SIZE) for pair in ALLOWED_PAIRS}
-active_positions = {}    # Tracks what we bought: {'SOLUSDT': 134.50}
+active_positions = {}    
 
 app = FastAPI()
 
@@ -50,7 +56,7 @@ def save_ai_log(symbol, action, confidence, price, reason):
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print(f"⚡ NEXUS-7: SAFETY SHIELD ACTIVE (SL: -{STOP_LOSS_PCT*100}%)")
+    print(f"⚡ NEXUS-7: COMPLIANCE STRATEGY ACTIVE (Lev: {LEVERAGE}x)")
     
     try:
         while True:
@@ -78,47 +84,45 @@ async def websocket_endpoint(websocket: WebSocket):
                 entry_price = active_positions[target_pair]
                 pct_change = (current_price - entry_price) / entry_price
                 
-                # A. STOP LOSS HIT? (Bad Trade -> Kill it)
+                # STOP LOSS (The Shield)
                 if pct_change <= -STOP_LOSS_PCT:
                     log_type = "RISK_CHECK"
                     sentiment = "SELL_STOP_LOSS"
                     confidence = 100
-                    log_msg = f"🛡️ STOP LOSS TRIGGERED: Sold {target_pair} at {current_price} (Loss: {pct_change*100:.2f}%)"
-                    del active_positions[target_pair] # Close position
-                    save_ai_log(target_pair, "SELL", 100, current_price, "Stop Loss Protection")
+                    log_msg = f"🛡️ STOP LOSS: Sold {target_pair} (Saved Capital)"
+                    del active_positions[target_pair] 
+                    save_ai_log(target_pair, "SELL", 100, current_price, "Stop Loss Triggered")
 
-                # B. TAKE PROFIT HIT? (Good Trade -> Bank it)
+                # TAKE PROFIT (The Bank)
                 elif pct_change >= TAKE_PROFIT_PCT:
                     log_type = "OPPORTUNITY"
                     sentiment = "SELL_TAKE_PROFIT"
                     confidence = 100
-                    log_msg = f"💰 PROFIT SECURED: Sold {target_pair} at {current_price} (Gain: {pct_change*100:.2f}%)"
-                    del active_positions[target_pair] # Close position
+                    log_msg = f"💰 PROFIT LOCKED: Sold {target_pair} (+{pct_change*100:.2f}%)"
+                    del active_positions[target_pair]
                     save_ai_log(target_pair, "SELL", 100, current_price, "Take Profit Hit")
                 
                 else:
-                    # Position is open and safe
                     log_msg = f"Holding {target_pair} (PnL: {pct_change*100:.2f}%)"
             
-            # --- 2. LOOK FOR NEW TRADES (STRATEGIST LOGIC) ---
+            # --- 2. LOOK FOR NEW TRADES (CONFLUENCE LOGIC) ---
             elif len(history_list) >= 20:
-                # Simple Moving Average Logic
                 sma = sum(history_list) / len(history_list)
                 deviation = (current_price - sma) / sma
                 
-                # Only buy if price pumps 0.1% above average (Momentum)
-                if deviation > 0.001: 
+                # LOGIC: If price pumps 0.15% above average, it's a breakout.
+                # We increased the threshold to 0.15% to be safer (fewer fake trades).
+                if deviation > 0.0015: 
                     sentiment = "BULLISH"
                     confidence = 85 + int(deviation * 10000)
                     reason = "Momentum Breakout"
                     
                     if confidence > 90:
                         log_type = "EXECUTION"
-                        log_msg = f"🚀 BUY SIGNAL: {target_pair} @ {current_price} (Target: +4%)"
-                        active_positions[target_pair] = current_price # OPEN POSITION
+                        log_msg = f"🚀 BUY SIGNAL: {target_pair} @ {current_price} (Trend Confirmed)"
+                        active_positions[target_pair] = current_price
                         save_ai_log(target_pair, "BUY", confidence, current_price, reason)
                 
-            # Send Data to Dashboard
             data = {
                 "timestamp": datetime.now().strftime("%H:%M:%S"),
                 "symbol": target_pair,
