@@ -2,26 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
 /* Nexus-7: GlassBox Trading Terminal Design System
-   Institutional Dark Theme with Cinematic Effects
+   Professional Institutional Dark Theme
 */
 
 @layer base {
   :root {
-    /* Core Background - Deep Matte Black */
-    --background: 0 0% 2%;
+    /* Core Background - Pure Matte Black #0a0a0a */
+    --background: 0 0% 4%;
     --foreground: 0 0% 95%;
 
-    /* Card Surfaces */
-    --card: 0 0% 4%;
+    /* Card Surfaces - Slightly elevated */
+    --card: 0 0% 5%;
     --card-foreground: 0 0% 95%;
 
     /* Popover */
-    --popover: 0 0% 5%;
+    --popover: 0 0% 6%;
     --popover-foreground: 0 0% 95%;
 
-    /* Primary - Profit Green */
-    --primary: 145 100% 45%;
+    /* Primary - Neon Green #00ff9d */
+    --primary: 157 100% 50%;
     --primary-foreground: 0 0% 2%;
 
     /* Secondary - Muted Surface */
@@ -29,75 +32,75 @@
     --secondary-foreground: 0 0% 80%;
 
     /* Muted Elements */
-    --muted: 0 0% 10%;
-    --muted-foreground: 0 0% 55%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 50%;
 
     /* Accent - Subtle Highlight */
-    --accent: 0 0% 12%;
+    --accent: 0 0% 10%;
     --accent-foreground: 0 0% 95%;
 
-    /* Destructive - Risk Red */
-    --destructive: 348 100% 55%;
+    /* Destructive - Risk Red #ff3b30 */
+    --destructive: 4 100% 59%;
     --destructive-foreground: 0 0% 100%;
 
     /* Borders & Inputs */
-    --border: 0 0% 15%;
-    --input: 0 0% 12%;
-    --ring: 145 100% 45%;
+    --border: 0 0% 12%;
+    --input: 0 0% 10%;
+    --ring: 157 100% 50%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
     /* Sidebar */
     --sidebar-background: 0 0% 3%;
     --sidebar-foreground: 0 0% 70%;
-    --sidebar-primary: 145 100% 45%;
+    --sidebar-primary: 157 100% 50%;
     --sidebar-primary-foreground: 0 0% 2%;
     --sidebar-accent: 0 0% 8%;
     --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 0 0% 12%;
-    --sidebar-ring: 145 100% 45%;
+    --sidebar-border: 0 0% 10%;
+    --sidebar-ring: 157 100% 50%;
 
     /* Custom Trading Theme Colors */
-    --profit: 145 100% 45%;
-    --profit-glow: 145 100% 50%;
-    --risk: 348 100% 55%;
-    --risk-glow: 348 100% 60%;
-    --warning: 45 100% 50%;
+    --profit: 157 100% 50%;
+    --profit-glow: 157 100% 60%;
+    --risk: 4 100% 59%;
+    --risk-glow: 4 100% 65%;
+    --warning: 38 100% 50%;
     --info: 200 100% 50%;
-    --terminal-green: 120 100% 40%;
-    --terminal-cyan: 180 100% 50%;
-    --terminal-purple: 270 100% 60%;
-    --terminal-yellow: 45 100% 50%;
+    --terminal-green: 157 100% 50%;
+    --terminal-cyan: 187 100% 50%;
+    --terminal-purple: 270 100% 65%;
+    --terminal-yellow: 38 100% 50%;
   }
 
   .dark {
-    --background: 0 0% 2%;
+    --background: 0 0% 4%;
     --foreground: 0 0% 95%;
-    --card: 0 0% 4%;
+    --card: 0 0% 5%;
     --card-foreground: 0 0% 95%;
-    --popover: 0 0% 5%;
+    --popover: 0 0% 6%;
     --popover-foreground: 0 0% 95%;
-    --primary: 145 100% 45%;
+    --primary: 157 100% 50%;
     --primary-foreground: 0 0% 2%;
     --secondary: 0 0% 8%;
     --secondary-foreground: 0 0% 80%;
-    --muted: 0 0% 10%;
-    --muted-foreground: 0 0% 55%;
-    --accent: 0 0% 12%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 50%;
+    --accent: 0 0% 10%;
     --accent-foreground: 0 0% 95%;
-    --destructive: 348 100% 55%;
+    --destructive: 4 100% 59%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 15%;
-    --input: 0 0% 12%;
-    --ring: 145 100% 45%;
+    --border: 0 0% 12%;
+    --input: 0 0% 10%;
+    --ring: 157 100% 50%;
     --sidebar-background: 0 0% 3%;
     --sidebar-foreground: 0 0% 70%;
-    --sidebar-primary: 145 100% 45%;
+    --sidebar-primary: 157 100% 50%;
     --sidebar-primary-foreground: 0 0% 2%;
     --sidebar-accent: 0 0% 8%;
     --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 0 0% 12%;
-    --sidebar-ring: 145 100% 45%;
+    --sidebar-border: 0 0% 10%;
+    --sidebar-ring: 157 100% 50%;
   }
 }
 
@@ -107,8 +110,12 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
     font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Inter', system-ui, sans-serif;
   }
 }
 
