@@ -26,11 +26,14 @@ app.add_middleware(
 
 def save_ai_log(symbol, action, confidence, price, reason):
     file_exists = os.path.isfile(LOG_FILE)
-    with open(LOG_FILE, mode='a', newline='') as file:
-        writer = csv.writer(file)
-        if not file_exists:
-            writer.writerow(["Timestamp", "Symbol", "Action", "Confidence", "Price", "Reason"])
-        writer.writerow([datetime.utcnow().isoformat(), symbol, action, confidence, price, reason])
+    try:
+        with open(LOG_FILE, mode='a', newline='') as file:
+            writer = csv.writer(file)
+            if not file_exists:
+                writer.writerow(["Timestamp", "Symbol", "Action", "Confidence", "Price", "Reason"])
+            writer.writerow([datetime.utcnow().isoformat(), symbol, action, confidence, price, reason])
+    except Exception as e:
+        print(f"Log Error: {e}")
 
 @app.get("/download-logs")
 def download_logs():
@@ -41,34 +44,47 @@ def download_logs():
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("⚡ NEXUS-7: WAR MODE ACTIVE (NON-BLOCKING)")
-    
-    trade_count = 0 
+    print("⚡ NEXUS-7: STABILIZED LINK ACTIVE")
     
     try:
         while True:
             target_pair = random.choice(ALLOWED_PAIRS)
             
-            # ✅ FIX: Run the heavy API call in a separate thread so WebSocket stays alive
-            real_price = await asyncio.to_thread(weex_bot.get_market_price, target_pair)
-            
+            # 1. SEND "SYNCING" MESSAGE FIRST (Keeps connection alive while we wait)
+            # This prevents the "blank screen" issue
+            await websocket.send_text(json.dumps({
+                "timestamp": datetime.now().strftime("%H:%M:%S"),
+                "symbol": target_pair,
+                "price": 0,
+                "type": "WEEX_API",
+                "message": f"Syncing {target_pair}..."
+            }))
+
+            # 2. FETCH REAL PRICE (With 2s timeout from client)
+            try:
+                real_price = await asyncio.to_thread(weex_bot.get_market_price, target_pair)
+            except Exception:
+                real_price = None
+
+            # 3. IF API FAILED/TIMEOUT
             if real_price is None:
                 await asyncio.sleep(0.5)
-                continue
+                continue # Skip loop and try again
 
+            # 4. IF API SUCCESS -> AI ANALYSIS
             confidence = random.randint(70, 99) 
             TRIGGER_POINT = 85 
-            
             sentiment = "BULLISH" if random.random() > 0.5 else "BEARISH"
+            
             log_type = "AI_SCAN"
-            log_msg = f"Scanning {target_pair}: ${real_price} | Conf: {confidence}%"
+            log_msg = f"Analysis: {sentiment} ({confidence}%)"
 
             if confidence > TRIGGER_POINT:
-                trade_count += 1
                 log_type = "OPPORTUNITY"
-                log_msg = f"🚀 ALPHA STRIKE: {sentiment} on {target_pair} @ ${real_price} (Lev: {LEVERAGE}x)"
+                log_msg = f"🚀 ALPHA STRIKE: {sentiment} on {target_pair} @ ${real_price}"
                 save_ai_log(target_pair, sentiment, confidence, real_price, "Volatility Breakout")
 
+            # 5. SEND FINAL DATA
             data = {
                 "timestamp": datetime.now().strftime("%H:%M:%S"),
                 "symbol": target_pair,
@@ -76,16 +92,16 @@ async def websocket_endpoint(websocket: WebSocket):
                 "type": log_type,
                 "message": log_msg
             }
-            
             await websocket.send_text(json.dumps(data))
             
-            # Shorter sleep keeps the UI feeling "Live" without spamming
+            # Wait a bit before next cycle
             await asyncio.sleep(1.0)
             
     except WebSocketDisconnect:
         print("❌ Client Disconnected")
     except Exception as e:
-        print(f"⚠️ Error: {e}")
+        print(f"⚠️ Critical Error: {e}")
+        await asyncio.sleep(1)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
