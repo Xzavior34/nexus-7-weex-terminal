@@ -5,6 +5,7 @@ import base64
 import requests
 import json
 
+# --- CONFIGURATION ---
 WEEX_CONFIG = {
     "API_KEY": "weex_d6eac84d6220ac893cd2fb10aadcf493",
     "SECRET_KEY": "dd6dda820151a46c6ac9dc1e0baf1d846ba9d1c8deee0d93aa3e71d516515c3b",
@@ -18,39 +19,68 @@ class WeexClient:
         self.secret = WEEX_CONFIG["SECRET_KEY"]
         self.passphrase = WEEX_CONFIG["PASSPHRASE"]
         self.base_url = WEEX_CONFIG["BASE_URL"]
-        
-        # 🔥 FIX: Add Browser Headers so WEEX doesn't block us
-        self.headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-            "Accept": "application/json"
-        }
 
+    # --- UNBLOCKABLE PUBLIC DATA (Via Binance Public Feed) ---
     def get_market_price(self, symbol):
-        """Fetches REAL PRICE via Public Endpoint with Error Reporting"""
+        """
+        Fetches Real-Time Price from Binance (Unblockable).
+        Symbol format input: 'BTCUSDT' -> automatically handled.
+        """
         try:
-            url = f"{self.base_url}/api/v1/market/ticker?symbol={symbol}_UMCBL"
+            # Clean the symbol just in case (e.g. remove _UMCBL if present)
+            clean_symbol = symbol.replace("_UMCBL", "").upper()
             
-            # Use the browser headers
-            res = requests.get(url, headers=self.headers, timeout=3)
+            # Binance Public API (No keys needed, very fast)
+            url = f"https://api.binance.com/api/v3/ticker/price?symbol={clean_symbol}"
             
-            if res.status_code != 200:
-                print(f"⚠️ API Error {res.status_code}: {res.text}")
-                return None
-                
+            res = requests.get(url, timeout=2)
             data = res.json()
-            if "data" in data and data["data"]:
-                return float(data["data"]["lastPrice"])
-            return None
             
-        except Exception as e:
-            print(f"⚠️ Connection Error: {e}")
+            if "price" in data:
+                return float(data["price"])
+            return None
+        except Exception:
             return None
 
-    # Keep trading methods for the future
+    # --- TRADING EXECUTION (STILL ON WEEX) ---
+    # These use your API Keys and run only when you place a trade.
+    # They are less likely to be blocked because they are signed requests.
+    
     def _get_signature(self, method, request_path, body=""):
         timestamp = str(int(time.time() * 1000))
         message = timestamp + method.upper() + request_path + body
-        signature = hmac.new(self.secret.encode('utf-8'), message.encode('utf-8'), hashlib.sha256).digest()
-        return timestamp, base64.b64encode(signature).decode('utf-8')
+        signature = hmac.new(
+            self.secret.encode('utf-8'),
+            message.encode('utf-8'),
+            hashlib.sha256
+        ).digest()
+        sign_b64 = base64.b64encode(signature).decode('utf-8')
+        return timestamp, sign_b64
+
+    def place_order(self, symbol, side, size):
+        params = {
+            "symbol": symbol + "_UMCBL",
+            "side": side,
+            "type": "market",
+            "size": str(size),
+            "marginMode": "cross"
+        }
+        # Simplified Private Request Logic for Order Placement
+        endpoint = "/api/v1/order/submit"
+        body = json.dumps(params)
+        timestamp, sign = self._get_signature("POST", endpoint, body)
+        
+        headers = {
+            "ACCESS-KEY": self.key,
+            "ACCESS-SIGN": sign,
+            "ACCESS-TIMESTAMP": timestamp,
+            "ACCESS-PASSPHRASE": self.passphrase,
+            "Content-Type": "application/json"
+        }
+        try:
+            response = requests.post(self.base_url + endpoint, headers=headers, data=body, timeout=5)
+            return response.json()
+        except Exception as e:
+            return {"error": str(e)}
 
 weex_bot = WeexClient()
