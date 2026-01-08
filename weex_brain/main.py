@@ -1,3 +1,4 @@
+
 import uvicorn
 import asyncio
 import json
@@ -12,13 +13,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from weex_client import weex_bot
 
-# ✅ APPROVED "HIGH BETA" MAJORS (No Meme Coins)
-# 1. SOL: Moves fast, very liquid.
-# 2. DOGE: The only "safe" volatile coin (Top 10).
-# 3. SUI: High volatility Layer 1 (Professional).
-# 4. XRP: Moves independently from BTC.
-# 5. BTC: The backup anchor.
-ALLOWED_PAIRS = ["SOLUSDT", "DOGEUSDT", "SUIUSDT", "XRPUSDT", "BTCUSDT"]
+# ✅ APPROVED "HIGH BETA" MAJORS (Expanded to 12 for Compliance)
+# We track 12 coins to ensure we hit the "10 Trades" requirement quickly.
+ALLOWED_PAIRS = [
+    "BTCUSDT",   # The King
+    "ETHUSDT",   # The Queen
+    "SOLUSDT",   # Speed
+    "DOGEUSDT",  # Volatility
+    "XRPUSDT",   # Old Guard
+    "SUIUSDT",   # New L1
+    "BNBUSDT",   # Exchange Coin (High Volume)
+    "ADAUSDT",   # Cardano (Stable)
+    "AVAXUSDT",  # Avalanche (Fast Mover)
+    "LINKUSDT",  # DeFi Oracle (Reliable)
+    "DOTUSDT",   # Polkadot
+    "LTCUSDT"    # Litecoin (The "Silver" to BTC)
+]
 
 # --- 🛡️ PROFESSIONAL RISK MANAGEMENT ---
 # These settings are tuned to "Preserve Capital" while "Hunting Profit"
