@@ -4,24 +4,14 @@ import hashlib
 import base64
 import requests
 import json
+import random
 
+# --- WEEX CONFIG ---
 WEEX_CONFIG = {
     "API_KEY": "weex_d6eac84d6220ac893cd2fb10aadcf493",
     "SECRET_KEY": "dd6dda820151a46c6ac9dc1e0baf1d846ba9d1c8deee0d93aa3e71d516515c3b",
     "PASSPHRASE": "weex0717289",
     "BASE_URL": "https://api-contract.weex.com"
-}
-
-# Map WEEX symbols to CoinGecko IDs
-SYMBOL_MAP = {
-    "BTCUSDT": "bitcoin",
-    "ETHUSDT": "ethereum",
-    "SOLUSDT": "solana",
-    "XRPUSDT": "ripple",
-    "ADAUSDT": "cardano",
-    "DOGEUSDT": "dogecoin",
-    "LTCUSDT": "litecoin",
-    "BNBUSDT": "binancecoin"
 }
 
 class WeexClient:
@@ -30,39 +20,77 @@ class WeexClient:
         self.secret = WEEX_CONFIG["SECRET_KEY"]
         self.passphrase = WEEX_CONFIG["PASSPHRASE"]
         self.base_url = WEEX_CONFIG["BASE_URL"]
+        # Browser-like headers to avoid being blocked
+        self.headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Accept": "application/json"
+        }
 
-    # --- PLAN D: COINGECKO FEED (Cloud Friendly) ---
+    # --- THE TANK: MULTI-SOURCE PRICE FETCHER ---
     def get_market_price(self, symbol):
+        """
+        Tries 5 different sources. If one fails, it tries the next.
+        """
+        clean_sym = symbol.replace("_UMCBL", "").upper() # e.g., "BTCUSDT"
+        base_coin = clean_sym.replace("USDT", "")        # e.g., "BTC"
+        
+        # SOURCE 1: BINANCE (Fastest)
         try:
-            # 1. Clean symbol (BTCUSDT_UMCBL -> BTCUSDT)
-            clean_sym = symbol.replace("_UMCBL", "").upper()
-            
-            # 2. Get CoinGecko ID
-            cg_id = SYMBOL_MAP.get(clean_sym)
-            if not cg_id:
-                return None # Unknown symbol
+            url = f"https://api.binance.com/api/v3/ticker/price?symbol={clean_sym}"
+            res = requests.get(url, headers=self.headers, timeout=2)
+            if res.status_code == 200:
+                return float(res.json()["price"])
+        except:
+            pass
 
-            # 3. Fetch Price (No Keys Needed)
-            url = f"https://api.coingecko.com/api/v3/simple/price?ids={cg_id}&vs_currencies=usd"
+        # SOURCE 2: COINBASE (Very Reliable, US-based)
+        try:
+            url = f"https://api.coinbase.com/v2/prices/{base_coin}-USD/spot"
+            res = requests.get(url, headers=self.headers, timeout=2)
+            if res.status_code == 200:
+                return float(res.json()["data"]["amount"])
+        except:
+            pass
+
+        # SOURCE 3: KRAKEN (Alternative)
+        try:
+            # Kraken uses XBT instead of BTC sometimes, but let's try standard pairs
+            pair = f"{base_coin}USD"
+            if base_coin == "BTC": pair = "XXBTZUSD"
+            elif base_coin == "ETH": pair = "XETHZUSD"
             
-            # Add headers to look like a real browser
-            headers = {
-                "User-Agent": "Mozilla/5.0",
-                "Accept": "application/json"
-            }
+            url = f"https://api.kraken.com/0/public/Ticker?pair={pair}"
+            res = requests.get(url, headers=self.headers, timeout=2)
+            if res.status_code == 200:
+                data = res.json()
+                if "result" in data:
+                    first_key = list(data["result"].keys())[0]
+                    return float(data["result"][first_key]["c"][0])
+        except:
+            pass
             
-            res = requests.get(url, headers=headers, timeout=3)
-            data = res.json()
-            
-            # 4. Parse Response: {'bitcoin': {'usd': 67000}}
-            if cg_id in data and 'usd' in data[cg_id]:
-                return float(data[cg_id]['usd'])
-            
-            return None
-            
-        except Exception as e:
-            print(f"CoinGecko Error: {e}")
-            return None
+        # SOURCE 4: OKX (Asian Markets)
+        try:
+            url = f"https://www.okx.com/api/v5/market/ticker?instId={base_coin}-USDT"
+            res = requests.get(url, headers=self.headers, timeout=2)
+            if res.status_code == 200:
+                return float(res.json()["data"][0]["last"])
+        except:
+            pass
+
+        # SOURCE 5: COINGECKO (Last Resort - Slower)
+        try:
+            cg_map = {"BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana", "DOGE": "dogecoin"}
+            cg_id = cg_map.get(base_coin)
+            if cg_id:
+                url = f"https://api.coingecko.com/api/v3/simple/price?ids={cg_id}&vs_currencies=usd"
+                res = requests.get(url, headers=self.headers, timeout=3)
+                if res.status_code == 200:
+                    return float(res.json()[cg_id]["usd"])
+        except:
+            pass
+
+        return None # All sources failed (Very unlikely)
 
     # --- TRADING EXECUTION (STILL ON WEEX) ---
     def _get_signature(self, method, request_path, body=""):
