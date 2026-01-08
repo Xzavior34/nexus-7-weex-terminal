@@ -12,15 +12,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from weex_client import weex_bot
 
-ALLOWED_PAIRS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT", "LTCUSDT", "BNBUSDT"]
+# ✅ SAFE & VOLATILE MIX
+ALLOWED_PAIRS = ["SOLUSDT", "DOGEUSDT", "XRPUSDT", "SUIUSDT", "BTCUSDT"]
 
-# --- STRATEGY SETTINGS ---
-LEVERAGE = 8          
-HISTORY_SIZE = 30     # Need more data for RSI/Bollinger (approx 60s memory)
+# --- 🛡️ SAFETY SETTINGS ---
+LEVERAGE = 8             # High enough to win
+STOP_LOSS_PCT = 0.02     # If price drops 2%, SELL. (Prevents liquidation)
+TAKE_PROFIT_PCT = 0.04   # If price rises 4%, SELL. (Locks in money)
+
+HISTORY_SIZE = 30
 LOG_FILE = "ai_trading_logs.csv"
 
-# --- SMART MEMORY BANK ---
 price_history = {pair: deque(maxlen=HISTORY_SIZE) for pair in ALLOWED_PAIRS}
+active_positions = {}    # Tracks what we bought: {'SOLUSDT': 134.50}
 
 app = FastAPI()
 
@@ -31,47 +35,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# --- ADVANCED MATH ENGINE ---
-def calculate_rsi(prices, period=14):
-    """Calculates Relative Strength Index (0-100)."""
-    if len(prices) < period + 1: return 50 # Not enough data
-    
-    gains = []
-    losses = []
-    
-    for i in range(1, len(prices)):
-        change = prices[i] - prices[i-1]
-        if change > 0:
-            gains.append(change)
-            losses.append(0)
-        else:
-            gains.append(0)
-            losses.append(abs(change))
-            
-    avg_gain = sum(gains[-period:]) / period
-    avg_loss = sum(losses[-period:]) / period
-    
-    if avg_loss == 0: return 100
-    rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
-
-def calculate_bollinger_bands(prices, period=20):
-    """Calculates Volatility Bands (Upper, Lower)."""
-    if len(prices) < period: return 0, 0, 0
-    
-    # 1. Simple Moving Average (SMA)
-    sma = sum(prices[-period:]) / period
-    
-    # 2. Standard Deviation
-    variance = sum([((x - sma) ** 2) for x in prices[-period:]]) / period
-    std_dev = math.sqrt(variance)
-    
-    upper_band = sma + (std_dev * 2)
-    lower_band = sma - (std_dev * 2)
-    
-    return upper_band, lower_band, sma
 
 def save_ai_log(symbol, action, confidence, price, reason):
     try:
@@ -84,22 +47,14 @@ def save_ai_log(symbol, action, confidence, price, reason):
     except:
         pass
 
-@app.get("/download-logs")
-def download_logs():
-    if os.path.exists(LOG_FILE):
-        return FileResponse(LOG_FILE, media_type='text/csv', filename="ai_trading_logs.csv")
-    return {"error": "No trades generated yet."}
-
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print(f"⚡ NEXUS-7: STRATEGIST ENGINE (RSI+BB) ACTIVE")
+    print(f"⚡ NEXUS-7: SAFETY SHIELD ACTIVE (SL: -{STOP_LOSS_PCT*100}%)")
     
     try:
         while True:
             target_pair = random.choice(ALLOWED_PAIRS)
-            
-            # 1. FETCH REAL PRICE
             current_price = await asyncio.to_thread(weex_bot.get_market_price, target_pair)
 
             if current_price is None:
@@ -109,63 +64,61 @@ async def websocket_endpoint(websocket: WebSocket):
                     await asyncio.sleep(1.0)
                     continue
 
-            # 2. UPDATE MEMORY
+            # Update Memory
             price_history[target_pair].append(current_price)
             history_list = list(price_history[target_pair])
             
+            log_type = "AI_SCAN"
+            log_msg = f"Scanning {target_pair}..."
             sentiment = "NEUTRAL"
             confidence = 0
-            reason = "Analyzing..."
-            
-            # 3. RUN TRINITY ANALYSIS (Need 20+ data points)
-            if len(history_list) >= 20:
-                # A. Calculate Indicators
-                rsi = calculate_rsi(history_list)
-                upper_bb, lower_bb, sma = calculate_bollinger_bands(history_list)
+
+            # --- 🛡️ 1. CHECK ACTIVE POSITIONS (SAFETY SHIELD) ---
+            if target_pair in active_positions:
+                entry_price = active_positions[target_pair]
+                pct_change = (current_price - entry_price) / entry_price
                 
-                # B. The "Strategist" Logic
-                # BULLISH SIGNAL: Price breaks Upper Band AND RSI is not maxed out (<75)
-                if current_price > upper_bb and rsi < 75:
-                    sentiment = "BULLISH"
-                    confidence = 85 + int((current_price - upper_bb) / upper_bb * 1000)
-                    reason = f"BB Breakout + RSI {int(rsi)} OK"
-                    
-                # BEARISH SIGNAL: Price breaks Lower Band AND RSI is not bottomed out (>25)
-                elif current_price < lower_bb and rsi > 25:
-                    sentiment = "BEARISH"
-                    confidence = 85 + int((lower_bb - current_price) / lower_bb * 1000)
-                    reason = f"BB Breakdown + RSI {int(rsi)} OK"
+                # A. STOP LOSS HIT? (Bad Trade -> Kill it)
+                if pct_change <= -STOP_LOSS_PCT:
+                    log_type = "RISK_CHECK"
+                    sentiment = "SELL_STOP_LOSS"
+                    confidence = 100
+                    log_msg = f"🛡️ STOP LOSS TRIGGERED: Sold {target_pair} at {current_price} (Loss: {pct_change*100:.2f}%)"
+                    del active_positions[target_pair] # Close position
+                    save_ai_log(target_pair, "SELL", 100, current_price, "Stop Loss Protection")
+
+                # B. TAKE PROFIT HIT? (Good Trade -> Bank it)
+                elif pct_change >= TAKE_PROFIT_PCT:
+                    log_type = "OPPORTUNITY"
+                    sentiment = "SELL_TAKE_PROFIT"
+                    confidence = 100
+                    log_msg = f"💰 PROFIT SECURED: Sold {target_pair} at {current_price} (Gain: {pct_change*100:.2f}%)"
+                    del active_positions[target_pair] # Close position
+                    save_ai_log(target_pair, "SELL", 100, current_price, "Take Profit Hit")
                 
-                # REVERSION SIGNAL (Buying the dip)
-                elif current_price < lower_bb and rsi < 20:
-                    sentiment = "BULLISH" # Bounce likely
-                    confidence = 90
-                    reason = "Oversold Bounce (RSI < 20)"
-                    
                 else:
-                    sentiment = "NEUTRAL"
-                    confidence = 45
-                    reason = f"Range Bound (RSI: {int(rsi)})"
-
-                # Cap confidence
-                if confidence > 99: confidence = 99
-                
-            else:
-                sentiment = "CALIBRATING"
-                reason = f"Need Data ({len(history_list)}/20)"
-
-            TRIGGER_POINT = 85 
+                    # Position is open and safe
+                    log_msg = f"Holding {target_pair} (PnL: {pct_change*100:.2f}%)"
             
-            log_type = "AI_SCAN"
-            log_msg = f"Scan {target_pair}: ${current_price} | {sentiment}"
-
-            # 4. EXECUTION
-            if confidence > TRIGGER_POINT and sentiment != "NEUTRAL":
-                log_type = "OPPORTUNITY"
-                log_msg = f"🚀 STRATEGY SIGNAL: {sentiment} on {target_pair} ({reason})"
-                save_ai_log(target_pair, sentiment, confidence, current_price, reason)
-
-            # 5. SEND TO FRONTEND
+            # --- 2. LOOK FOR NEW TRADES (STRATEGIST LOGIC) ---
+            elif len(history_list) >= 20:
+                # Simple Moving Average Logic
+                sma = sum(history_list) / len(history_list)
+                deviation = (current_price - sma) / sma
+                
+                # Only buy if price pumps 0.1% above average (Momentum)
+                if deviation > 0.001: 
+                    sentiment = "BULLISH"
+                    confidence = 85 + int(deviation * 10000)
+                    reason = "Momentum Breakout"
+                    
+                    if confidence > 90:
+                        log_type = "EXECUTION"
+                        log_msg = f"🚀 BUY SIGNAL: {target_pair} @ {current_price} (Target: +4%)"
+                        active_positions[target_pair] = current_price # OPEN POSITION
+                        save_ai_log(target_pair, "BUY", confidence, current_price, reason)
+                
+            # Send Data to Dashboard
             data = {
                 "timestamp": datetime.now().strftime("%H:%M:%S"),
                 "symbol": target_pair,
@@ -173,12 +126,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 "type": log_type,
                 "message": log_msg
             }
-            
             await websocket.send_text(json.dumps(data))
-            
-            # Scan speed
             await asyncio.sleep(2.0)
-            
+
     except WebSocketDisconnect:
         print("❌ Disconnected")
     except Exception as e:
