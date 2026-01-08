@@ -14,17 +14,8 @@ ALLOWED_PAIRS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSD
 LEVERAGE = 12
 LOG_FILE = "ai_trading_logs.csv"
 
-# --- PRICE MEMORY (Prevents "Fetching Data" loops) ---
-last_known_prices = {
-    "BTCUSDT": 67300.00,
-    "ETHUSDT": 3450.00,
-    "SOLUSDT": 145.00,
-    "XRPUSDT": 0.62,
-    "ADAUSDT": 0.45,
-    "DOGEUSDT": 0.12,
-    "LTCUSDT": 85.00,
-    "BNBUSDT": 590.00
-}
+# --- MEMORY BANK (To compare Old vs New Price) ---
+price_memory = {}
 
 app = FastAPI()
 
@@ -56,51 +47,71 @@ def download_logs():
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("⚡ NEXUS-7: MULTI-SOURCE FEED ACTIVE")
+    print("⚡ NEXUS-7: SMART MOMENTUM ENGINE ACTIVE")
     
     try:
         while True:
             target_pair = random.choice(ALLOWED_PAIRS)
             
-            # 1. Try to fetch REAL price from 5 sources
-            real_price = await asyncio.to_thread(weex_bot.get_market_price, target_pair)
+            # 1. FETCH REAL PRICE
+            current_price = await asyncio.to_thread(weex_bot.get_market_price, target_pair)
 
-            # 2. FAILOVER LOGIC
-            if real_price is None:
-                # Use Memory if Real fails
-                price_to_use = last_known_prices.get(target_pair, 0)
-                note = "(Cached)"
+            if current_price is None:
+                # Use last known if fetch fails
+                current_price = price_memory.get(target_pair, 0)
+                if current_price == 0:
+                    await asyncio.sleep(1.0)
+                    continue
+
+            # 2. SMART ANALYSIS (Compare with Memory)
+            old_price = price_memory.get(target_pair, current_price) # Default to current if no memory
+            price_memory[target_pair] = current_price # Update memory for next time
+            
+            # Calculate Change
+            price_change = current_price - old_price
+            
+            # LOGIC: If price moved UP, we are BULLISH. If DOWN, we are BEARISH.
+            if price_change > 0:
+                sentiment = "BULLISH"
+                reason = "Upward Momentum"
+                confidence = 80 + int((price_change / current_price) * 10000) # Higher change = Higher confidence
+            elif price_change < 0:
+                sentiment = "BEARISH"
+                reason = "Downward Pressure"
+                confidence = 80 + int(abs((price_change / current_price) * 10000))
             else:
-                # Update Memory if Real succeeds
-                last_known_prices[target_pair] = real_price
-                price_to_use = real_price
-                note = ""
+                sentiment = "NEUTRAL"
+                confidence = 50
+                reason = "Stagnant"
 
-            # 3. AI LOGIC
-            confidence = random.randint(75, 99) 
+            # Cap confidence at 99%
+            if confidence > 99: confidence = 99
+            
             TRIGGER_POINT = 85 
-            sentiment = "BULLISH" if random.random() > 0.5 else "BEARISH"
             
             log_type = "AI_SCAN"
-            # Now logs show if data is Real or Cached
-            log_msg = f"Analyzed {target_pair}: ${price_to_use} {note} | Conf: {confidence}%"
+            log_msg = f"Analyzed {target_pair}: ${current_price} | Trend: {sentiment}"
 
-            if confidence > TRIGGER_POINT:
+            # 3. EXECUTION DECISION
+            if confidence > TRIGGER_POINT and sentiment != "NEUTRAL":
                 log_type = "OPPORTUNITY"
-                log_msg = f"🚀 ALPHA STRIKE: {sentiment} on {target_pair} @ ${price_to_use}"
-                save_ai_log(target_pair, sentiment, confidence, price_to_use, "Volatility Breakout")
+                log_msg = f"🚀 ALPHA STRIKE: {sentiment} on {target_pair} (Conf: {confidence}%)"
+                
+                # Save the Smart Decision to the Log File
+                save_ai_log(target_pair, sentiment, confidence, current_price, reason)
 
+            # 4. SEND TO FRONTEND
             data = {
                 "timestamp": datetime.now().strftime("%H:%M:%S"),
                 "symbol": target_pair,
-                "price": price_to_use,
+                "price": current_price,
                 "type": log_type,
                 "message": log_msg
             }
             
             await websocket.send_text(json.dumps(data))
             
-            # Speed: 2 seconds is safe for public APIs
+            # Wait 2 seconds to let the market move slightly
             await asyncio.sleep(2.0)
             
     except WebSocketDisconnect:
