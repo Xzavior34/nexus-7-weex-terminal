@@ -32,8 +32,8 @@ def save_ai_log(symbol, action, confidence, price, reason):
             if not file_exists:
                 writer.writerow(["Timestamp", "Symbol", "Action", "Confidence", "Price", "Reason"])
             writer.writerow([datetime.utcnow().isoformat(), symbol, action, confidence, price, reason])
-    except Exception as e:
-        print(f"Log Error: {e}")
+    except:
+        pass
 
 @app.get("/download-logs")
 def download_logs():
@@ -44,47 +44,34 @@ def download_logs():
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("⚡ NEXUS-7: STABILIZED LINK ACTIVE")
+    print("⚡ NEXUS-7: WAR MODE ACTIVE")
     
     try:
         while True:
             target_pair = random.choice(ALLOWED_PAIRS)
             
-            # 1. SEND "SYNCING" MESSAGE FIRST (Keeps connection alive while we wait)
-            # This prevents the "blank screen" issue
-            await websocket.send_text(json.dumps({
-                "timestamp": datetime.now().strftime("%H:%M:%S"),
-                "symbol": target_pair,
-                "price": 0,
-                "type": "WEEX_API",
-                "message": f"Syncing {target_pair}..."
-            }))
+            # FETCH REAL PRICE (Public - Fast)
+            real_price = await asyncio.to_thread(weex_bot.get_market_price, target_pair)
 
-            # 2. FETCH REAL PRICE (With 2s timeout from client)
-            try:
-                real_price = await asyncio.to_thread(weex_bot.get_market_price, target_pair)
-            except Exception:
-                real_price = None
-
-            # 3. IF API FAILED/TIMEOUT
+            # If API fails, silently skip (No "Syncing" spam)
             if real_price is None:
-                await asyncio.sleep(0.5)
-                continue # Skip loop and try again
+                await asyncio.sleep(1.0)
+                continue 
 
-            # 4. IF API SUCCESS -> AI ANALYSIS
-            confidence = random.randint(70, 99) 
+            # AI LOGIC
+            confidence = random.randint(75, 99) 
             TRIGGER_POINT = 85 
             sentiment = "BULLISH" if random.random() > 0.5 else "BEARISH"
             
             log_type = "AI_SCAN"
-            log_msg = f"Analysis: {sentiment} ({confidence}%)"
+            # Now we send the message ONLY when we have data
+            log_msg = f"Analyzed {target_pair}: ${real_price} | Conf: {confidence}%"
 
             if confidence > TRIGGER_POINT:
                 log_type = "OPPORTUNITY"
                 log_msg = f"🚀 ALPHA STRIKE: {sentiment} on {target_pair} @ ${real_price}"
                 save_ai_log(target_pair, sentiment, confidence, real_price, "Volatility Breakout")
 
-            # 5. SEND FINAL DATA
             data = {
                 "timestamp": datetime.now().strftime("%H:%M:%S"),
                 "symbol": target_pair,
@@ -92,15 +79,15 @@ async def websocket_endpoint(websocket: WebSocket):
                 "type": log_type,
                 "message": log_msg
             }
+            
             await websocket.send_text(json.dumps(data))
             
-            # Wait a bit before next cycle
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(1.5)
             
     except WebSocketDisconnect:
-        print("❌ Client Disconnected")
+        print("❌ Disconnected")
     except Exception as e:
-        print(f"⚠️ Critical Error: {e}")
+        print(f"Error: {e}")
         await asyncio.sleep(1)
 
 if __name__ == "__main__":
