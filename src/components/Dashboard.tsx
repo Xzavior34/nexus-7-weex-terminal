@@ -87,13 +87,13 @@ export default function Dashboard() {
   const [chartData, setChartData] = useState(initialSparkline);
 
   // --- 💰 WALLET DATA (D-DAY SWITCH READY) ---
-  // This state will be OVERWRITTEN automatically by the backend data
   const [wallet, setWallet] = useState({
-    total: 1000.00,        // Starting Mock Balance
+    total: 1000.00,        
     available: 1000.00,
     inPositions: 0.00,
     unrealizedPnL: 0.00,
-    pnlPercent: 0.00
+    pnlPercent: 0.00,
+    positions: [] as any[] // <--- NEW: Dynamic List
   });
 
   // --- REAL-TIME PRICES STATE ---
@@ -131,15 +131,14 @@ export default function Dashboard() {
         addLog(data.type, data.message);
         
         // ⚡ AUTOMATIC WALLET SWITCH ⚡
-        // This listens for data from main.py. 
-        // Whether it's "Mock Data" or "Real Money", the dashboard doesn't care. It just displays it.
         if (data.wallet) {
             setWallet({
                 total: data.wallet.total,
                 available: data.wallet.available,
                 inPositions: data.wallet.inPositions,
                 unrealizedPnL: data.wallet.unrealizedPnL,
-                pnlPercent: data.wallet.pnlPercent
+                pnlPercent: data.wallet.pnlPercent,
+                positions: data.wallet.positions || [] // <--- Update the list
             });
         }
 
@@ -287,21 +286,29 @@ export default function Dashboard() {
               </div>
             </div>
 
+            {/* 🔥 DYNAMIC POSITIONS LIST 🔥 */}
             <div className="space-y-3">
-              <div className="text-gray-500 text-[10px] uppercase font-bold tracking-widest border-b border-white/5 pb-2">Open Positions (3)</div>
+              <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                <div className="text-gray-500 text-[10px] uppercase font-bold tracking-widest">Open Positions ({wallet.positions.length})</div>
+              </div>
               
-              <div className="flex justify-between items-center text-xs font-mono">
-                <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-orange-500 rounded-full"/> BTC/USDT</div>
-                <div className="text-[#00ff9d]">+0.93%</div>
-              </div>
-              <div className="flex justify-between items-center text-xs font-mono">
-                <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-green-500 rounded-full"/> SOL/USDT</div>
-                <div className="text-[#00ff9d]">+1.88%</div>
-              </div>
-              <div className="flex justify-between items-center text-xs font-mono">
-                <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-blue-500 rounded-full"/> ETH/USDT</div>
-                <div className="text-red-400">-0.87%</div>
-              </div>
+              {wallet.positions.length === 0 ? (
+                <div className="text-gray-600 text-xs italic text-center py-4">
+                  Scanning for targets...
+                </div>
+              ) : (
+                wallet.positions.map((pos, index) => (
+                  <div key={index} className="flex justify-between items-center text-xs font-mono">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-1.5 h-1.5 rounded-full ${pos.pnl >= 0 ? 'bg-green-500' : 'bg-red-500'}`}/> 
+                      {pos.symbol}
+                    </div>
+                    <div className={pos.pnl >= 0 ? "text-[#00ff9d]" : "text-red-400"}>
+                      {pos.pnl > 0 ? "+" : ""}{pos.pnl}%
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
