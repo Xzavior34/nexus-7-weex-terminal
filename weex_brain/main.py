@@ -19,15 +19,14 @@ ALLOWED_PAIRS = [
 ]
 
 # --- 🛡️ RISK MANAGEMENT ---
-LEVERAGE = 8             
-STOP_LOSS_PCT = 0.02     
-TAKE_PROFIT_PCT = 0.045  
+LEVERAGE = 10            # INCREASED slightly to make 2% moves meaningful (20% PnL)
+STOP_LOSS_PCT = 0.02     # SAFETY: Sell if price drops 2%
+# Note: Take Profit is now handled by Dynamic Logic below
 
 HISTORY_SIZE = 30
 LOG_FILE = "ai_trading_logs.csv"
 
 # --- 💰 SIMULATED WALLET (PAPER MONEY) ---
-# Start with $1,000 Fake USDT
 SIMULATED_WALLET = {
     "total": 1000.00,
     "available": 1000.00,
@@ -42,7 +41,7 @@ app = FastAPI()
 
 @app.api_route("/", methods=["GET", "HEAD"])
 def health_check():
-    return {"status": "active", "system": "Nexus-7 Online", "version": "2.4-LIST-READY"}
+    return {"status": "active", "system": "Nexus-7 Online", "version": "2.6-SMART-PROFIT"}
 
 app.add_middleware(
     CORSMiddleware,
@@ -72,7 +71,7 @@ def download_logs():
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print(f"⚡ NEXUS-7: SMART WALLET ACTIVE (Lev: {LEVERAGE}x)")
+    print(f"⚡ NEXUS-7: TIERED PROFIT LOGIC ACTIVE (Lev: {LEVERAGE}x)")
     
     try:
         while True:
@@ -102,57 +101,89 @@ async def websocket_endpoint(websocket: WebSocket):
             log_type = "AI_SCAN"
             log_msg = f"Scanning {target_pair}..."
             
-            # --- 🛡️ 1. CHECK ACTIVE POSITIONS ---
+            # --- 🛡️ 1. CHECK ACTIVE POSITIONS (SMART EXIT LOGIC) ---
             if target_pair in active_positions:
                 entry_price = active_positions[target_pair]
                 pct_change = (current_price - entry_price) / entry_price
                 
-                # UPDATE SIMULATED PNL (Fake Math)
-                # Assuming $100 bet per trade for simulation
+                # --- STATISTICS: DETERMINE TREND DIRECTION ---
+                # We compare current price to the average of the last 5 prices (Short Term Trend)
+                # If price < average, the trend is "DOWN" (Weakening)
+                # If price > average, the trend is "UP" (Strengthening)
+                trend_is_down = False
+                if len(history_list) >= 5:
+                    short_term_avg = sum(history_list[-5:]) / 5
+                    if current_price < short_term_avg:
+                        trend_is_down = True  # "Statistics say it will go down"
+
+                # UPDATE SIMULATED PNL
                 position_size = 100 
                 pnl_dollar = position_size * pct_change * LEVERAGE
                 
-                # NOTE: In a real system, you'd sum up PnL for ALL positions, not just the current scanned one.
-                # For this simulation, we update the global PnL based on the scanned pair's movement.
                 SIMULATED_WALLET["unrealized_pnl"] = pnl_dollar
                 SIMULATED_WALLET["total"] = SIMULATED_WALLET["available"] + SIMULATED_WALLET["in_positions"] + pnl_dollar
 
+                should_sell = False
+                sell_reason = ""
+
+                # 🛑 STOP LOSS (Fixed Safety)
                 if pct_change <= -STOP_LOSS_PCT:
+                    should_sell = True
+                    sell_reason = "Stop Loss Triggered"
                     log_type = "RISK_CHECK"
                     log_msg = f"🛡️ STOP LOSS: Sold {target_pair} (Saved Capital)"
-                    
-                    # SIMULATE SELL
-                    SIMULATED_WALLET["available"] += (100 + pnl_dollar)
-                    SIMULATED_WALLET["in_positions"] -= 100
-                    
-                    del active_positions[target_pair] 
-                    save_ai_log(target_pair, "SELL", 100, current_price, "Stop Loss Triggered")
 
-                elif pct_change >= TAKE_PROFIT_PCT:
+                # 🚀 TIER 3: JACKPOT (Hit 6%)
+                # If we hit 6%, we sell no matter what.
+                elif pct_change >= 0.06:
+                    should_sell = True
+                    sell_reason = "Jackpot Target Hit (6%)"
                     log_type = "OPPORTUNITY"
-                    log_msg = f"💰 PROFIT LOCKED: Sold {target_pair} (+{pct_change*100:.2f}%)"
-                    
-                    # SIMULATE PROFIT
-                    SIMULATED_WALLET["available"] += (100 + pnl_dollar)
-                    SIMULATED_WALLET["in_positions"] -= 100
+                    log_msg = f"💎 JACKPOT: Sold {target_pair} at +6% (+{pct_change*100:.2f}%)"
 
-                    del active_positions[target_pair]
-                    save_ai_log(target_pair, "SELL", 100, current_price, "Take Profit Hit")
-                
+                # 🚀 TIER 2: HIGH PROFIT (Hit 4%)
+                # Sell ONLY if statistics say "DOWN". If "UP", we hold for 6%.
+                elif pct_change >= 0.04:
+                    if trend_is_down:
+                        should_sell = True
+                        sell_reason = "Secure 4% (Trend Weakening)"
+                        log_type = "OPPORTUNITY"
+                        log_msg = f"💰 SECURED: Sold {target_pair} at +4% (Trend Weakening)"
+                    else:
+                        log_msg = f"🚀 Holding {target_pair} (+{pct_change*100:.2f}%) - Aiming for 6%!"
+
+                # 🚀 TIER 1: BASE PROFIT (Hit 2%)
+                # Sell ONLY if statistics say "DOWN". If "UP", we hold for 4%.
+                elif pct_change >= 0.02:
+                    if trend_is_down:
+                        should_sell = True
+                        sell_reason = "Secure 2% (Trend Weakening)"
+                        log_type = "OPPORTUNITY"
+                        log_msg = f"💰 SECURED: Sold {target_pair} at +2% (Trend Weakening)"
+                    else:
+                        log_msg = f"🚀 Holding {target_pair} (+{pct_change*100:.2f}%) - Aiming for 4%!"
+
                 else:
                     log_msg = f"Holding {target_pair} (PnL: {pct_change*100:.2f}%)"
+
+                # EXECUTE SELL IF FLAGGED
+                if should_sell:
+                    SIMULATED_WALLET["available"] += (100 + pnl_dollar)
+                    SIMULATED_WALLET["in_positions"] -= 100
+                    del active_positions[target_pair]
+                    save_ai_log(target_pair, "SELL", 100, current_price, sell_reason)
             
             # --- 2. LOOK FOR NEW TRADES ---
             elif len(history_list) >= 20:
                 sma = sum(history_list) / len(history_list)
                 deviation = (current_price - sma) / sma
                 
+                # Buy on 0.15% deviation
                 if deviation > 0.0015: 
                     if is_btc_bearish and target_pair != "BTCUSDT":
                          log_type = "AI_SCAN"
                          log_msg = f"🛡️ SMART GUARD: Skipped {target_pair} Buy (BTC is Weak)"
                     else:
-                        # SIMULATE BUY (Deduct $100 from Available)
                         if SIMULATED_WALLET["available"] >= 100:
                             SIMULATED_WALLET["available"] -= 100
                             SIMULATED_WALLET["in_positions"] += 100
@@ -162,17 +193,11 @@ async def websocket_endpoint(websocket: WebSocket):
                             active_positions[target_pair] = current_price
                             save_ai_log(target_pair, "BUY", 95, current_price, "Trend Confirmed")
             
-            # --- 3. SEND WALLET UPDATE TO FRONTEND ---
-            # 🚨 Generate Dynamic Position List 🚨
+            # --- 3. SEND WALLET UPDATE ---
             active_trades_list = []
             for sym, entry in active_positions.items():
-                # Use the last known price from memory to estimate PnL
-                # If memory is empty (rare), use entry price (0% PnL)
                 last_price = price_history[sym][-1] if len(price_history[sym]) > 0 else entry
-                
-                # Calculate simple PnL percentage
                 pnl_pct = (last_price - entry) / entry * 100
-                
                 active_trades_list.append({
                     "symbol": sym,
                     "pnl": round(pnl_pct, 2)
@@ -184,7 +209,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 "inPositions": round(SIMULATED_WALLET["in_positions"], 2),
                 "unrealizedPnL": round(SIMULATED_WALLET["unrealized_pnl"], 2),
                 "pnlPercent": round((SIMULATED_WALLET["total"] - 1000) / 1000 * 100, 2),
-                "positions": active_trades_list  # <--- NEW: SEND THE LIST
+                "positions": active_trades_list 
             }
             
             data = {
