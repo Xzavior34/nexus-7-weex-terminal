@@ -42,7 +42,7 @@ app = FastAPI()
 
 @app.api_route("/", methods=["GET", "HEAD"])
 def health_check():
-    return {"status": "active", "system": "Nexus-7 Online", "version": "2.3-WALLET-READY"}
+    return {"status": "active", "system": "Nexus-7 Online", "version": "2.4-LIST-READY"}
 
 app.add_middleware(
     CORSMiddleware,
@@ -112,6 +112,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 position_size = 100 
                 pnl_dollar = position_size * pct_change * LEVERAGE
                 
+                # NOTE: In a real system, you'd sum up PnL for ALL positions, not just the current scanned one.
+                # For this simulation, we update the global PnL based on the scanned pair's movement.
                 SIMULATED_WALLET["unrealized_pnl"] = pnl_dollar
                 SIMULATED_WALLET["total"] = SIMULATED_WALLET["available"] + SIMULATED_WALLET["in_positions"] + pnl_dollar
 
@@ -161,13 +163,28 @@ async def websocket_endpoint(websocket: WebSocket):
                             save_ai_log(target_pair, "BUY", 95, current_price, "Trend Confirmed")
             
             # --- 3. SEND WALLET UPDATE TO FRONTEND ---
-            # 🚨 ON JAN 18: REPLACE THIS BLOCK WITH REAL WEEX API CALL 🚨
+            # 🚨 Generate Dynamic Position List 🚨
+            active_trades_list = []
+            for sym, entry in active_positions.items():
+                # Use the last known price from memory to estimate PnL
+                # If memory is empty (rare), use entry price (0% PnL)
+                last_price = price_history[sym][-1] if len(price_history[sym]) > 0 else entry
+                
+                # Calculate simple PnL percentage
+                pnl_pct = (last_price - entry) / entry * 100
+                
+                active_trades_list.append({
+                    "symbol": sym,
+                    "pnl": round(pnl_pct, 2)
+                })
+
             wallet_payload = {
                 "total": round(SIMULATED_WALLET["total"], 2),
                 "available": round(SIMULATED_WALLET["available"], 2),
                 "inPositions": round(SIMULATED_WALLET["in_positions"], 2),
                 "unrealizedPnL": round(SIMULATED_WALLET["unrealized_pnl"], 2),
-                "pnlPercent": round((SIMULATED_WALLET["total"] - 1000) / 1000 * 100, 2)
+                "pnlPercent": round((SIMULATED_WALLET["total"] - 1000) / 1000 * 100, 2),
+                "positions": active_trades_list  # <--- NEW: SEND THE LIST
             }
             
             data = {
@@ -176,7 +193,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 "price": current_price,
                 "type": log_type,
                 "message": log_msg,
-                "wallet": wallet_payload  # <--- NEW FIELD
+                "wallet": wallet_payload 
             }
             await websocket.send_text(json.dumps(data))
             await asyncio.sleep(1.5)
