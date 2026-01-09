@@ -4,7 +4,6 @@ import json
 import csv
 import os
 import random
-import math
 from collections import deque
 from datetime import datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -12,43 +11,38 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from weex_client import weex_bot
 
-# ✅ APPROVED "HIGH BETA" MAJORS (Expanded to 12 for Compliance)
-# We track 12 coins to ensure we hit the "10 Trades" requirement quickly.
+# ✅ APPROVED "HIGH BETA" MAJORS
 ALLOWED_PAIRS = [
-    "BTCUSDT",   # The King
-    "ETHUSDT",   # The Queen
-    "SOLUSDT",   # Speed
-    "DOGEUSDT",  # Volatility
-    "XRPUSDT",   # Old Guard
-    "SUIUSDT",   # New L1
-    "BNBUSDT",   # Exchange Coin (High Volume)
-    "ADAUSDT",   # Cardano (Stable)
-    "AVAXUSDT",  # Avalanche (Fast Mover)
-    "LINKUSDT",  # DeFi Oracle (Reliable)
-    "DOTUSDT",   # Polkadot
-    "LTCUSDT"    # Litecoin (The "Silver" to BTC)
+    "BTCUSDT", "ETHUSDT", "SOLUSDT", "DOGEUSDT", 
+    "XRPUSDT", "SUIUSDT", "BNBUSDT", "ADAUSDT", 
+    "AVAXUSDT", "LINKUSDT", "DOTUSDT", "LTCUSDT"
 ]
 
-# --- 🛡️ PROFESSIONAL RISK MANAGEMENT ---
-# These settings are tuned to "Preserve Capital" while "Hunting Profit"
-LEVERAGE = 8             # 8x is the limit for aggressive/safe.
-STOP_LOSS_PCT = 0.02     # SAFETY: Sell if down 2% (Prevents disaster).
-TAKE_PROFIT_PCT = 0.045  # GREED: Sell if up 4.5% (Banks the win).
+# --- 🛡️ RISK MANAGEMENT ---
+LEVERAGE = 8             
+STOP_LOSS_PCT = 0.02     
+TAKE_PROFIT_PCT = 0.045  
 
 HISTORY_SIZE = 30
 LOG_FILE = "ai_trading_logs.csv"
 
-# separate history for BTC to track the "Market Mood"
+# --- 💰 SIMULATED WALLET (PAPER MONEY) ---
+# Start with $1,000 Fake USDT
+SIMULATED_WALLET = {
+    "total": 1000.00,
+    "available": 1000.00,
+    "in_positions": 0.00,
+    "unrealized_pnl": 0.00
+}
+
 price_history = {pair: deque(maxlen=HISTORY_SIZE) for pair in ALLOWED_PAIRS}
 active_positions = {}    
 
 app = FastAPI()
 
-# 🏥 CRITICAL UPTIME FIX: Explicitly Allow HEAD & GET
-# This fixes the "405 Method Not Allowed" error on UptimeRobot.
 @app.api_route("/", methods=["GET", "HEAD"])
 def health_check():
-    return {"status": "active", "system": "Nexus-7 Online", "version": "2.2-SMART"}
+    return {"status": "active", "system": "Nexus-7 Online", "version": "2.3-WALLET-READY"}
 
 app.add_middleware(
     CORSMiddleware,
@@ -78,92 +72,111 @@ def download_logs():
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print(f"⚡ NEXUS-7: SMART TREND FILTER ACTIVE (Lev: {LEVERAGE}x)")
+    print(f"⚡ NEXUS-7: SMART WALLET ACTIVE (Lev: {LEVERAGE}x)")
     
     try:
         while True:
-            # --- 🧠 STEP 1: READ THE GENERAL (BITCOIN) ---
-            # We always check BTC first to determine the "Market Mood"
+            # 1. BTC VETO CHECK
             btc_price = await asyncio.to_thread(weex_bot.get_market_price, "BTCUSDT")
             if btc_price:
                 price_history["BTCUSDT"].append(btc_price)
 
-            # Check if BTC is Bearish (Price < Average of last 10 readings)
             is_btc_bearish = False
             if len(price_history["BTCUSDT"]) >= 10:
                 btc_list = list(price_history["BTCUSDT"])
-                # Calculate simple moving average of recent BTC prices
                 btc_avg = sum(btc_list) / len(btc_list)
                 if btc_list[-1] < btc_avg:
                     is_btc_bearish = True
 
-            # --- STEP 2: SCAN A TARGET ---
+            # 2. SCAN TARGET
             target_pair = random.choice(ALLOWED_PAIRS)
             current_price = await asyncio.to_thread(weex_bot.get_market_price, target_pair)
 
             if current_price is None:
-                if len(price_history[target_pair]) > 0:
-                    current_price = price_history[target_pair][-1]
-                else:
-                    await asyncio.sleep(1.0)
-                    continue
+                await asyncio.sleep(1.0)
+                continue
 
-            # Update Memory
             price_history[target_pair].append(current_price)
             history_list = list(price_history[target_pair])
             
             log_type = "AI_SCAN"
             log_msg = f"Scanning {target_pair}..."
             
-            # --- 🛡️ 1. CHECK ACTIVE POSITIONS (SAFETY SHIELD) ---
+            # --- 🛡️ 1. CHECK ACTIVE POSITIONS ---
             if target_pair in active_positions:
                 entry_price = active_positions[target_pair]
                 pct_change = (current_price - entry_price) / entry_price
                 
-                # STOP LOSS (The Shield)
+                # UPDATE SIMULATED PNL (Fake Math)
+                # Assuming $100 bet per trade for simulation
+                position_size = 100 
+                pnl_dollar = position_size * pct_change * LEVERAGE
+                
+                SIMULATED_WALLET["unrealized_pnl"] = pnl_dollar
+                SIMULATED_WALLET["total"] = SIMULATED_WALLET["available"] + SIMULATED_WALLET["in_positions"] + pnl_dollar
+
                 if pct_change <= -STOP_LOSS_PCT:
                     log_type = "RISK_CHECK"
                     log_msg = f"🛡️ STOP LOSS: Sold {target_pair} (Saved Capital)"
+                    
+                    # SIMULATE SELL
+                    SIMULATED_WALLET["available"] += (100 + pnl_dollar)
+                    SIMULATED_WALLET["in_positions"] -= 100
+                    
                     del active_positions[target_pair] 
                     save_ai_log(target_pair, "SELL", 100, current_price, "Stop Loss Triggered")
 
-                # TAKE PROFIT (The Bank)
                 elif pct_change >= TAKE_PROFIT_PCT:
                     log_type = "OPPORTUNITY"
                     log_msg = f"💰 PROFIT LOCKED: Sold {target_pair} (+{pct_change*100:.2f}%)"
+                    
+                    # SIMULATE PROFIT
+                    SIMULATED_WALLET["available"] += (100 + pnl_dollar)
+                    SIMULATED_WALLET["in_positions"] -= 100
+
                     del active_positions[target_pair]
                     save_ai_log(target_pair, "SELL", 100, current_price, "Take Profit Hit")
                 
                 else:
                     log_msg = f"Holding {target_pair} (PnL: {pct_change*100:.2f}%)"
             
-            # --- 2. LOOK FOR NEW TRADES (WITH BITCOIN VETO) ---
+            # --- 2. LOOK FOR NEW TRADES ---
             elif len(history_list) >= 20:
                 sma = sum(history_list) / len(history_list)
                 deviation = (current_price - sma) / sma
                 
-                # LOGIC: If price pumps 0.15% above average, it's a breakout.
                 if deviation > 0.0015: 
-                    
-                    # 🛑 THE VETO: Only Buy if BTC is Strong!
-                    # If BTC is weak, we skip the buy unless the target IS Bitcoin itself.
                     if is_btc_bearish and target_pair != "BTCUSDT":
                          log_type = "AI_SCAN"
                          log_msg = f"🛡️ SMART GUARD: Skipped {target_pair} Buy (BTC is Weak)"
                     else:
-                        confidence = 85 + int(deviation * 10000)
-                        if confidence > 90:
+                        # SIMULATE BUY (Deduct $100 from Available)
+                        if SIMULATED_WALLET["available"] >= 100:
+                            SIMULATED_WALLET["available"] -= 100
+                            SIMULATED_WALLET["in_positions"] += 100
+                            
                             log_type = "EXECUTION"
                             log_msg = f"🚀 BUY SIGNAL: {target_pair} @ {current_price}"
                             active_positions[target_pair] = current_price
-                            save_ai_log(target_pair, "BUY", confidence, current_price, "Trend Confirmed")
-                
+                            save_ai_log(target_pair, "BUY", 95, current_price, "Trend Confirmed")
+            
+            # --- 3. SEND WALLET UPDATE TO FRONTEND ---
+            # 🚨 ON JAN 18: REPLACE THIS BLOCK WITH REAL WEEX API CALL 🚨
+            wallet_payload = {
+                "total": round(SIMULATED_WALLET["total"], 2),
+                "available": round(SIMULATED_WALLET["available"], 2),
+                "inPositions": round(SIMULATED_WALLET["in_positions"], 2),
+                "unrealizedPnL": round(SIMULATED_WALLET["unrealized_pnl"], 2),
+                "pnlPercent": round((SIMULATED_WALLET["total"] - 1000) / 1000 * 100, 2)
+            }
+            
             data = {
                 "timestamp": datetime.now().strftime("%H:%M:%S"),
                 "symbol": target_pair,
                 "price": current_price,
                 "type": log_type,
-                "message": log_msg
+                "message": log_msg,
+                "wallet": wallet_payload  # <--- NEW FIELD
             }
             await websocket.send_text(json.dumps(data))
             await asyncio.sleep(1.5)
