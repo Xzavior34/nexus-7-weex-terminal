@@ -87,16 +87,16 @@ export default function Dashboard() {
   const [chartData, setChartData] = useState(initialSparkline);
 
   // --- 💰 WALLET DATA (D-DAY SWITCH READY) ---
+  // This state will be OVERWRITTEN automatically by the backend data
   const [wallet, setWallet] = useState({
-    total: 25847.50,
-    available: 18420.30,
-    inPositions: 7427.20,
-    unrealizedPnL: 124.65,
-    pnlPercent: 0.48
+    total: 1000.00,        // Starting Mock Balance
+    available: 1000.00,
+    inPositions: 0.00,
+    unrealizedPnL: 0.00,
+    pnlPercent: 0.00
   });
 
   // --- REAL-TIME PRICES STATE ---
-  // "Start" is used to calculate the dynamic percentage change
   const [prices, setPrices] = useState({
     SOL: { price: 138.64, change: "+0.75%", start: 136.00 }, 
     BTC: { price: 91207.30, change: "+0.04%", start: 90800.00 },
@@ -130,11 +130,23 @@ export default function Dashboard() {
         const data = JSON.parse(event.data);
         addLog(data.type, data.message);
         
+        // ⚡ AUTOMATIC WALLET SWITCH ⚡
+        // This listens for data from main.py. 
+        // Whether it's "Mock Data" or "Real Money", the dashboard doesn't care. It just displays it.
+        if (data.wallet) {
+            setWallet({
+                total: data.wallet.total,
+                available: data.wallet.available,
+                inPositions: data.wallet.inPositions,
+                unrealizedPnL: data.wallet.unrealizedPnL,
+                pnlPercent: data.wallet.pnlPercent
+            });
+        }
+
         // ⚡ DYNAMIC PRICE & PERCENTAGE UPDATE ⚡
         if (data.price) {
             const sym = data.symbol.replace("USDT", "");
             
-            // Check if we track this symbol
             if (prices[sym as keyof typeof prices]) {
               setPrices(prev => {
                 const coinKey = sym as keyof typeof prev;
@@ -148,8 +160,8 @@ export default function Dashboard() {
                   ...prev,
                   [coinKey]: {
                     ...oldData,
-                    price: data.price, // Update Price
-                    change: `${sign}${percentChange.toFixed(2)}%` // Update Percentage
+                    price: data.price,
+                    change: `${sign}${percentChange.toFixed(2)}%` 
                   }
                 };
               });
@@ -212,7 +224,7 @@ export default function Dashboard() {
             </h2>
           </div>
 
-          {/* ⚡ 4-GRID LAYOUT (RESTORED) */}
+          {/* ⚡ 4-GRID LAYOUT */}
           <div className="grid grid-cols-2 gap-4">
             <MarketCard symbol="BTC" price={`$${prices.BTC.price.toLocaleString()}`} change={prices.BTC.change} isPositive={!prices.BTC.change.includes("-")} data={chartData} />
             <MarketCard symbol="SOL" price={`$${prices.SOL.price.toLocaleString()}`} change={prices.SOL.change} isPositive={!prices.SOL.change.includes("-")} data={chartData} />
@@ -258,8 +270,8 @@ export default function Dashboard() {
                  <div className="text-4xl font-mono font-bold text-white tracking-tight">${wallet.total.toLocaleString()}</div>
               </div>
               <div className="text-right">
-                <div className="bg-[#00ff9d]/10 text-[#00ff9d] text-xs font-bold px-2 py-1 rounded border border-[#00ff9d]/20">
-                  +{wallet.pnlPercent}%
+                <div className={`bg-[#00ff9d]/10 text-[#00ff9d] text-xs font-bold px-2 py-1 rounded border border-[#00ff9d]/20 ${wallet.pnlPercent < 0 ? 'text-red-400 border-red-400/20 bg-red-400/10' : ''}`}>
+                  {wallet.pnlPercent > 0 ? '+' : ''}{wallet.pnlPercent}%
                 </div>
               </div>
             </div>
