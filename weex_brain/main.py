@@ -236,4 +236,17 @@ async def websocket_endpoint(websocket: WebSocket):
                 "price": current_price,
                 "type": log_type,
                 "message": log_msg,
-                "wallet": wallet
+                "wallet": wallet_payload 
+            }
+            await websocket.send_text(json.dumps(data))
+            await asyncio.sleep(1.5)
+
+    except WebSocketDisconnect:
+        print("❌ Disconnected")
+    except Exception as e:
+        print(f"Error: {e}")
+        await asyncio.sleep(1)
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
