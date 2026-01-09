@@ -19,20 +19,11 @@ ALLOWED_PAIRS = [
 ]
 
 # --- 🛡️ RISK MANAGEMENT ---
-LEVERAGE = 10            # INCREASED slightly to make 2% moves meaningful (20% PnL)
-STOP_LOSS_PCT = 0.02     # SAFETY: Sell if price drops 2%
-# Note: Take Profit is now handled by Dynamic Logic below
-
+LEVERAGE = 10            
+STOP_LOSS_PCT = 0.02     
 HISTORY_SIZE = 30
 LOG_FILE = "ai_trading_logs.csv"
-
-# --- 💰 SIMULATED WALLET (PAPER MONEY) ---
-SIMULATED_WALLET = {
-    "total": 1000.00,
-    "available": 1000.00,
-    "in_positions": 0.00,
-    "unrealized_pnl": 0.00
-}
+WALLET_FILE = "wallet_data.json"  # <--- NEW: The Bank Vault
 
 price_history = {pair: deque(maxlen=HISTORY_SIZE) for pair in ALLOWED_PAIRS}
 active_positions = {}    
@@ -41,7 +32,7 @@ app = FastAPI()
 
 @app.api_route("/", methods=["GET", "HEAD"])
 def health_check():
-    return {"status": "active", "system": "Nexus-7 Online", "version": "2.6-SMART-PROFIT"}
+    return {"status": "active", "system": "Nexus-7 Online", "version": "2.7-PERSISTENT"}
 
 app.add_middleware(
     CORSMiddleware,
@@ -50,6 +41,34 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- 💾 PERSISTENCE FUNCTIONS ---
+def load_wallet():
+    """Loads wallet from file or starts fresh if no file exists."""
+    if os.path.exists(WALLET_FILE):
+        try:
+            with open(WALLET_FILE, "r") as f:
+                return json.load(f)
+        except:
+            pass
+    # Default start
+    return {
+        "total": 1000.00,
+        "available": 1000.00,
+        "in_positions": 0.00,
+        "unrealized_pnl": 0.00
+    }
+
+def save_wallet():
+    """Saves current wallet state to file."""
+    try:
+        with open(WALLET_FILE, "w") as f:
+            json.dump(SIMULATED_WALLET, f)
+    except:
+        pass
+
+# Initialize Wallet
+SIMULATED_WALLET = load_wallet()
 
 def save_ai_log(symbol, action, confidence, price, reason):
     try:
@@ -71,7 +90,7 @@ def download_logs():
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print(f"⚡ NEXUS-7: TIERED PROFIT LOGIC ACTIVE (Lev: {LEVERAGE}x)")
+    print(f"⚡ NEXUS-7: PERSISTENT MODE ACTIVE (Lev: {LEVERAGE}x)")
     
     try:
         while True:
@@ -101,22 +120,19 @@ async def websocket_endpoint(websocket: WebSocket):
             log_type = "AI_SCAN"
             log_msg = f"Scanning {target_pair}..."
             
-            # --- 🛡️ 1. CHECK ACTIVE POSITIONS (SMART EXIT LOGIC) ---
+            # --- 🛡️ 1. CHECK ACTIVE POSITIONS ---
             if target_pair in active_positions:
                 entry_price = active_positions[target_pair]
                 pct_change = (current_price - entry_price) / entry_price
                 
-                # --- STATISTICS: DETERMINE TREND DIRECTION ---
-                # We compare current price to the average of the last 5 prices (Short Term Trend)
-                # If price < average, the trend is "DOWN" (Weakening)
-                # If price > average, the trend is "UP" (Strengthening)
+                # --- TREND CHECK ---
                 trend_is_down = False
                 if len(history_list) >= 5:
                     short_term_avg = sum(history_list[-5:]) / 5
                     if current_price < short_term_avg:
-                        trend_is_down = True  # "Statistics say it will go down"
+                        trend_is_down = True
 
-                # UPDATE SIMULATED PNL
+                # UPDATE PNL
                 position_size = 100 
                 pnl_dollar = position_size * pct_change * LEVERAGE
                 
@@ -126,23 +142,21 @@ async def websocket_endpoint(websocket: WebSocket):
                 should_sell = False
                 sell_reason = ""
 
-                # 🛑 STOP LOSS (Fixed Safety)
+                # STOP LOSS
                 if pct_change <= -STOP_LOSS_PCT:
                     should_sell = True
                     sell_reason = "Stop Loss Triggered"
                     log_type = "RISK_CHECK"
                     log_msg = f"🛡️ STOP LOSS: Sold {target_pair} (Saved Capital)"
 
-                # 🚀 TIER 3: JACKPOT (Hit 6%)
-                # If we hit 6%, we sell no matter what.
+                # JACKPOT (6%)
                 elif pct_change >= 0.06:
                     should_sell = True
                     sell_reason = "Jackpot Target Hit (6%)"
                     log_type = "OPPORTUNITY"
                     log_msg = f"💎 JACKPOT: Sold {target_pair} at +6% (+{pct_change*100:.2f}%)"
 
-                # 🚀 TIER 2: HIGH PROFIT (Hit 4%)
-                # Sell ONLY if statistics say "DOWN". If "UP", we hold for 6%.
+                # PROFIT (4%)
                 elif pct_change >= 0.04:
                     if trend_is_down:
                         should_sell = True
@@ -152,8 +166,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     else:
                         log_msg = f"🚀 Holding {target_pair} (+{pct_change*100:.2f}%) - Aiming for 6%!"
 
-                # 🚀 TIER 1: BASE PROFIT (Hit 2%)
-                # Sell ONLY if statistics say "DOWN". If "UP", we hold for 4%.
+                # PROFIT (2%)
                 elif pct_change >= 0.02:
                     if trend_is_down:
                         should_sell = True
@@ -166,11 +179,14 @@ async def websocket_endpoint(websocket: WebSocket):
                 else:
                     log_msg = f"Holding {target_pair} (PnL: {pct_change*100:.2f}%)"
 
-                # EXECUTE SELL IF FLAGGED
+                # EXECUTE SELL
                 if should_sell:
                     SIMULATED_WALLET["available"] += (100 + pnl_dollar)
                     SIMULATED_WALLET["in_positions"] -= 100
                     del active_positions[target_pair]
+                    
+                    # 💾 SAVE TO DISK IMMEDIATELY
+                    save_wallet()
                     save_ai_log(target_pair, "SELL", 100, current_price, sell_reason)
             
             # --- 2. LOOK FOR NEW TRADES ---
@@ -178,7 +194,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 sma = sum(history_list) / len(history_list)
                 deviation = (current_price - sma) / sma
                 
-                # Buy on 0.15% deviation
                 if deviation > 0.0015: 
                     if is_btc_bearish and target_pair != "BTCUSDT":
                          log_type = "AI_SCAN"
@@ -191,6 +206,9 @@ async def websocket_endpoint(websocket: WebSocket):
                             log_type = "EXECUTION"
                             log_msg = f"🚀 BUY SIGNAL: {target_pair} @ {current_price}"
                             active_positions[target_pair] = current_price
+                            
+                            # 💾 SAVE TO DISK IMMEDIATELY
+                            save_wallet()
                             save_ai_log(target_pair, "BUY", 95, current_price, "Trend Confirmed")
             
             # --- 3. SEND WALLET UPDATE ---
@@ -218,17 +236,4 @@ async def websocket_endpoint(websocket: WebSocket):
                 "price": current_price,
                 "type": log_type,
                 "message": log_msg,
-                "wallet": wallet_payload 
-            }
-            await websocket.send_text(json.dumps(data))
-            await asyncio.sleep(1.5)
-
-    except WebSocketDisconnect:
-        print("❌ Disconnected")
-    except Exception as e:
-        print(f"Error: {e}")
-        await asyncio.sleep(1)
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+                "wallet": wallet
