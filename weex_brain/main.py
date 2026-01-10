@@ -34,7 +34,7 @@ app = FastAPI()
 
 @app.api_route("/", methods=["GET", "HEAD"])
 def health_check():
-    return {"status": "active", "system": "Nexus-7 Sniper Mode", "version": "3.1-CHAMPION"}
+    return {"status": "active", "system": "Nexus-7 Patrol Mode", "version": "3.2-OMNI"}
 
 app.add_middleware(
     CORSMiddleware,
@@ -89,7 +89,10 @@ def download_logs():
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print(f"⚡ NEXUS-7: SNIPER MODE (Lev: {LEVERAGE}x | Bet: {BET_PERCENTAGE*100}%)")
+    print(f"⚡ NEXUS-7: PATROL MODE (Lev: {LEVERAGE}x | Bet: {BET_PERCENTAGE*100}%)")
+    
+    # Initialize the "Patrol Index"
+    scan_index = 0
     
     try:
         while True:
@@ -105,8 +108,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 if btc_list[-1] < btc_avg:
                     is_btc_bearish = True
 
-            # 2. SCAN TARGET
-            target_pair = random.choice(ALLOWED_PAIRS)
+            # 2. SCAN TARGET (PATROL MODE: NO RANDOM)
+            # Cycle through the list: 0, 1, 2 ... 11, 0, 1...
+            target_pair = ALLOWED_PAIRS[scan_index]
+            scan_index = (scan_index + 1) % len(ALLOWED_PAIRS)
+            
             current_price = await asyncio.to_thread(weex_bot.get_market_price, target_pair)
 
             if current_price is None:
@@ -123,7 +129,7 @@ async def websocket_endpoint(websocket: WebSocket):
             if target_pair in active_positions:
                 entry_data = active_positions[target_pair]
                 entry_price = entry_data["price"]
-                position_size = entry_data["size"] # Use the ACTUAL bet size we made
+                position_size = entry_data["size"] 
 
                 pct_change = (current_price - entry_price) / entry_price
                 
