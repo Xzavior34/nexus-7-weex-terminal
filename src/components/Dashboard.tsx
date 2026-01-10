@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
-import { Terminal, Shield, Wallet, Zap, Activity, Lock, Cpu, Wifi } from 'lucide-react';
+import { Terminal, Shield, Wallet, Zap, Activity, Lock, Cpu, Wifi, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 // --- TYPES ---
-type LogType = 'AI_SCAN' | 'WEEX_API' | 'RISK_CHECK' | 'OPPORTUNITY' | 'EXECUTION';
+type LogType = 'AI_SCAN' | 'WEEX_API' | 'RISK_CHECK' | 'OPPORTUNITY' | 'EXECUTION' | 'VETO_BLOCK';
 
 interface LogMessage {
   id: string;
@@ -20,17 +20,17 @@ const initialSparkline = Array.from({ length: 40 }, (_, i) => ({
 
 // --- COMPONENTS ---
 const StatusBadge = ({ icon: Icon, label, active = true, color = "green" }: any) => (
-  <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${
+  <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all duration-500 ${
     active 
-      ? `bg-${color}-500/10 border-${color}-500/20 text-${color}-400` 
-      : 'bg-red-500/10 border-red-500/30 text-red-400'
-  } text-[10px] font-mono backdrop-blur-md shadow-lg`}>
-    <Icon size={12} className={active ? "animate-pulse" : ""} />
+      ? `bg-${color}-500/10 border-${color}-500/20 text-${color}-400 shadow-[0_0_10px_rgba(0,0,0,0.5)]` 
+      : 'bg-gray-500/10 border-gray-500/30 text-gray-400'
+  } text-[10px] font-mono backdrop-blur-md`}>
+    <Icon size={12} className={active && color !== 'red' ? "animate-pulse" : ""} />
     <span>{label}</span>
   </div>
 );
 
-// 🔥 GLASSBOX MARKET CARD (With Glowing Area Chart)
+// 🔥 GLASSBOX MARKET CARD
 const MarketCard = ({ symbol, price, change, isPositive, data }: any) => (
   <motion.div 
     initial={{ opacity: 0 }}
@@ -85,15 +85,16 @@ export default function Dashboard() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [chartData, setChartData] = useState(initialSparkline);
+  const [vetoStatus, setVetoStatus] = useState("GREEN"); // Default Safe
 
-  // --- 💰 WALLET DATA (D-DAY SWITCH READY) ---
+  // --- 💰 WALLET DATA ---
   const [wallet, setWallet] = useState({
     total: 1000.00,        
     available: 1000.00,
     inPositions: 0.00,
     unrealizedPnL: 0.00,
     pnlPercent: 0.00,
-    positions: [] as any[] // <--- NEW: Dynamic List
+    positions: [] as any[]
   });
 
   // --- REAL-TIME PRICES STATE ---
@@ -117,6 +118,7 @@ export default function Dashboard() {
 
   // --- WEBSOCKET CONNECTION ---
   useEffect(() => {
+    // ⚠️ UPDATE THIS URL TO YOUR REAL BACKEND URL IF NEEDED
     const wsUrl = "wss://nexus-7-weex-terminal.onrender.com/ws/stream"; 
     const ws = new WebSocket(wsUrl);
 
@@ -130,7 +132,12 @@ export default function Dashboard() {
         const data = JSON.parse(event.data);
         addLog(data.type, data.message);
         
-        // ⚡ AUTOMATIC WALLET SWITCH ⚡
+        // 🚦 VETO STATUS UPDATE
+        if (data.veto_status) {
+           setVetoStatus(data.veto_status);
+        }
+
+        // 💰 WALLET UPDATE
         if (data.wallet) {
             setWallet({
                 total: data.wallet.total,
@@ -138,11 +145,11 @@ export default function Dashboard() {
                 inPositions: data.wallet.inPositions,
                 unrealizedPnL: data.wallet.unrealizedPnL,
                 pnlPercent: data.wallet.pnlPercent,
-                positions: data.wallet.positions || [] // <--- Update the list
+                positions: data.wallet.positions || [] 
             });
         }
 
-        // ⚡ DYNAMIC PRICE & PERCENTAGE UPDATE ⚡
+        // ⚡ PRICE UPDATE
         if (data.price) {
             const sym = data.symbol.replace("USDT", "");
             
@@ -150,8 +157,6 @@ export default function Dashboard() {
               setPrices(prev => {
                 const coinKey = sym as keyof typeof prev;
                 const oldData = prev[coinKey];
-                
-                // MATH: ((NewPrice - StartPrice) / StartPrice) * 100
                 const percentChange = ((data.price - oldData.start) / oldData.start) * 100;
                 const sign = percentChange >= 0 ? "+" : "";
                 
@@ -201,13 +206,20 @@ export default function Dashboard() {
         <div className="max-w-[1600px] mx-auto px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Activity className="text-[#00ff9d]" size={18} />
-            <h1 className="font-bold tracking-widest text-lg">NEXUS-7 <span className="text-gray-600 text-xs font-mono ml-2">GlassBox Terminal</span></h1>
+            <h1 className="font-bold tracking-widest text-lg">NEXUS-7 <span className="text-gray-600 text-xs font-mono ml-2">GlassBox v2.0</span></h1>
           </div>
           
           <div className="flex gap-3">
-            <StatusBadge icon={Wifi} label={isConnected ? "WEEX API: CONNECTED" : "WEEX API: OFF"} active={isConnected} color="green" />
-            <StatusBadge icon={Cpu} label="AI ENGINE: ONLINE" color="purple" />
-            <StatusBadge icon={Shield} label="RISK GUARD: ACTIVE" color="yellow" />
+            {/* 🚦 VETO STATUS INDICATOR */}
+            <StatusBadge 
+                icon={vetoStatus === "RED" ? AlertTriangle : Lock} 
+                label={vetoStatus === "RED" ? "BTC VETO: ENGAGED" : "BTC VETO: SAFE"} 
+                active={true} 
+                color={vetoStatus === "RED" ? "red" : "green"} 
+            />
+
+            <StatusBadge icon={Wifi} label={isConnected ? "API: LINKED" : "API: DOWN"} active={isConnected} color="green" />
+            <StatusBadge icon={Cpu} label="AI: ONLINE" color="purple" />
           </div>
         </div>
       </header>
@@ -219,7 +231,7 @@ export default function Dashboard() {
         <div className="col-span-12 lg:col-span-8 space-y-6">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-mono text-gray-400 uppercase tracking-widest flex items-center gap-2">
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> Live Markets
+              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> Kinetic Markets
             </h2>
           </div>
 
@@ -237,7 +249,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between px-5 py-3 bg-white/5 border-b border-white/5">
               <div className="flex items-center gap-2">
                 <Terminal size={14} className="text-[#00ff9d]" />
-                <span className="text-xs font-mono text-[#00ff9d] tracking-widest uppercase shadow-[#00ff9d]">AI Logic Stream</span>
+                <span className="text-xs font-mono text-[#00ff9d] tracking-widest uppercase shadow-[#00ff9d]">Nexus-7 Logic Stream</span>
               </div>
             </div>
 
@@ -247,7 +259,8 @@ export default function Dashboard() {
                   <span className="text-gray-600">{log.timestamp}</span>
                   <span className={`font-bold ${
                     log.type === 'EXECUTION' ? 'text-[#00ff9d]' : 
-                    log.type === 'RISK_CHECK' ? 'text-yellow-500' : 'text-purple-400'
+                    log.type === 'RISK_CHECK' ? 'text-yellow-500' : 
+                    log.type === 'VETO_BLOCK' ? 'text-red-500' : 'text-purple-400'
                   }`}>[{log.type}]</span>
                   <span className="text-gray-300">{log.message}</span>
                 </div>
@@ -294,14 +307,17 @@ export default function Dashboard() {
               
               {wallet.positions.length === 0 ? (
                 <div className="text-gray-600 text-xs italic text-center py-4">
-                  Scanning for targets...
+                  {vetoStatus === "RED" 
+                    ? <span className="text-red-400">⛔ Scans Paused (BTC Veto)</span>
+                    : "Scanning for targets..."
+                  }
                 </div>
               ) : (
                 wallet.positions.map((pos, index) => (
                   <div key={index} className="flex justify-between items-center text-xs font-mono">
                     <div className="flex items-center gap-2">
                       <div className={`w-1.5 h-1.5 rounded-full ${pos.pnl >= 0 ? 'bg-green-500' : 'bg-red-500'}`}/> 
-                      {pos.symbol}
+                      {pos.symbol} <span className="text-[9px] text-gray-500">({pos.type})</span>
                     </div>
                     <div className={pos.pnl >= 0 ? "text-[#00ff9d]" : "text-red-400"}>
                       {pos.pnl > 0 ? "+" : ""}{pos.pnl}%
@@ -320,16 +336,18 @@ export default function Dashboard() {
             </div>
             
             <div className="flex justify-between items-end mb-2">
-               <span className="text-3xl font-mono font-bold text-white">8x</span>
-               <span className="text-xs text-yellow-500 border border-yellow-500/20 bg-yellow-500/10 px-2 py-1 rounded">Competition Safe</span>
+               <span className="text-3xl font-mono font-bold text-white">{vetoStatus === "RED" ? "MAX" : "8x"}</span>
+               <span className={`text-xs border px-2 py-1 rounded ${
+                 vetoStatus === "RED" 
+                   ? "text-red-400 border-red-500/20 bg-red-500/10"
+                   : "text-yellow-500 border-yellow-500/20 bg-yellow-500/10"
+               }`}>
+                 {vetoStatus === "RED" ? "CRASH PROTECTION" : "Competition Safe"}
+               </span>
             </div>
             
             <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
-               <div className="bg-yellow-500 h-full w-2/5 rounded-full shadow-[0_0_10px_orange]" />
-            </div>
-            <div className="flex justify-between mt-2 text-[10px] text-gray-600 font-mono">
-              <span>1x</span>
-              <span>20x (Cap)</span>
+               <div className={`h-full w-2/5 rounded-full shadow-[0_0_10px_orange] ${vetoStatus === "RED" ? "bg-red-500 w-full" : "bg-yellow-500"}`} />
             </div>
           </div>
 
