@@ -20,15 +20,15 @@ ALLOWED_PAIRS = [
 # --- 🎯 NEXUS 7 CONFIGURATION ---
 LEVERAGE = 10            
 BET_PERCENTAGE = 0.15    # 15% of Wallet per trade
-HISTORY_SIZE = 50        # Sufficient for RSI-14 calculation
+HISTORY_SIZE = 50        
 
 # --- 📉 FALL LOGIC: THE SNIPER LADDER ---
-# [0.5%, 1.7%, 2%, 4%, 6%]
+# The bot looks for these specific percentage drops
 DIP_THRESHOLDS = [0.005, 0.017, 0.02, 0.04, 0.06]
 
 # --- 🚀 RIDE LOGIC: MOMENTUM TRIGGER ---
-MOMENTUM_THRESHOLD = 1.015  # 1.5% Surge
-RSI_OVERBOUGHT = 75         # SAFETY: Don't buy if RSI > 75
+MOMENTUM_THRESHOLD = 1.015  # Price is 1.5% above average
+RSI_OVERBOUGHT = 75         # Safety Ceiling
 
 LOG_FILE = "nexus7_logs.csv"
 WALLET_FILE = "wallet_data.json" 
@@ -41,7 +41,7 @@ app = FastAPI()
 
 @app.api_route("/", methods=["GET", "HEAD"])
 def health_check():
-    return {"status": "active", "system": "Nexus-7 Kinetic Engine", "version": "3.4-SAFEGUARD"}
+    return {"status": "active", "system": "Nexus-7 Kinetic Engine", "version": "3.5-GREEN_TICK"}
 
 app.add_middleware(
     CORSMiddleware,
@@ -59,7 +59,6 @@ def calculate_rsi(prices, period=14):
     gains = []
     losses = []
     
-    # Calculate changes
     for i in range(1, len(prices)):
         change = prices[i] - prices[i-1]
         if change > 0:
@@ -69,12 +68,11 @@ def calculate_rsi(prices, period=14):
             gains.append(0)
             losses.append(abs(change))
             
-    # Simple Average (Lightweight for Bot speed)
     avg_gain = sum(gains[-period:]) / period
     avg_loss = sum(losses[-period:]) / period
     
     if avg_loss == 0:
-        return 100 # Max RSI
+        return 100 
     
     rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
@@ -124,7 +122,7 @@ def download_logs():
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print(f"⚡ NEXUS-7 ONLINE: VETO ENABLED | RSI GUARD ACTIVE")
+    print(f"⚡ NEXUS-7 ONLINE: GREEN TICK VERIFICATION ACTIVE")
     
     scan_index = 0
     
@@ -204,7 +202,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     log_msg = f"💰 SOLD {target_pair}: {sell_reason}"
 
             # --- 🔭 SEARCH FOR NEW TRADES ---
-            # (Only enters here if we DO NOT have a position in this pair)
             elif len(history_list) >= 20:
                 
                 # METRICS
@@ -231,16 +228,36 @@ async def websocket_endpoint(websocket: WebSocket):
                     else:
                         log_msg = f"⚠️ RIDE Skipped: RSI Overheated ({rsi_val:.1f})"
 
-                # 📉 2. THE "FALL" (Sniper Ladder)
+                # 📉 2. THE "FALL" (Sniper Ladder + GREEN TICK)
                 # Only check fallback if Momentum didn't trigger
                 if not buy_signal:
                     for threshold in DIP_THRESHOLDS:
                         upper_limit = threshold + 0.003 
+                        
                         if threshold <= pullback_pct < upper_limit:
-                            buy_signal = True
-                            buy_reason = f"📉 FALL: Sniped {threshold*100}% Dip"
-                            buy_type = "DIP_BUY"
-                            break
+                            
+                            # --- 🧠 SMART CHECK: THE GREEN TICK ---
+                            # If checking the risky 0.5% level, ensure price is CURLLING UP
+                            if threshold == 0.005:
+                                last_price_check = history_list[-2] if len(history_list) > 1 else current_price
+                                
+                                if current_price <= last_price_check:
+                                    # Price is still falling! Skip this cycle.
+                                    log_msg = f"📉 {target_pair} at 0.5% dip, waiting for CURL..."
+                                    break 
+                                else:
+                                    # Price ticked UP! Confirm buy.
+                                    buy_signal = True
+                                    buy_reason = f"✅ CURL: Sniped {threshold*100}% Dip on Bounce"
+                                    buy_type = "DIP_BUY"
+                                    break
+                            
+                            else:
+                                # For deeper dips (1.7%+), just buy (Panic Oversold)
+                                buy_signal = True
+                                buy_reason = f"📉 FALL: Sniped {threshold*100}% Dip"
+                                buy_type = "DIP_BUY"
+                                break
 
                 # 🚫 BTC VETO OVERRIDE
                 if buy_signal:
