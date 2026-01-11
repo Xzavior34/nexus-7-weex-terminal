@@ -15,7 +15,7 @@ from weex_client import weex_bot  # Assuming this handles your API calls
 LIVE_TRADING = False          # ⚠️ SET TO TRUE TO TRADE REAL MONEY
 LEVERAGE = 10                 # High-Performance Leverage
 BET_PERCENTAGE = 0.15         # 15% of Wallet per trade
-HISTORY_SIZE = 300            # 2.5 minutes of memory (Better Trend Logic)
+HISTORY_SIZE = 300            # 2.5 minutes of memory
 LOOP_DELAY = 0.5              # Fast loop
 
 # ✅ APPROVED "HIGH BETA" MAJORS
@@ -37,6 +37,8 @@ WALLET_FILE = "wallet_data.json"
 price_history = {pair: deque(maxlen=HISTORY_SIZE) for pair in ALLOWED_PAIRS}
 active_positions = {} 
 SIMULATED_WALLET = {} 
+# 🧠 MEMORY CACHE: Stores the last REAL price to prevent "Blank Screens"
+last_known_prices = {}
 
 app = FastAPI()
 
@@ -100,50 +102,50 @@ def save_nexus_log(symbol, action, type_tag, price, reason):
 # Initialize Wallet
 SIMULATED_WALLET = load_wallet()
 
-# --- 🚀 ASYNC CORE (SPEED FIX: HARD TIMEOUT) ---
+# --- 🚀 ASYNC CORE (PURE REAL-TIME PARALLEL) ---
 
 async def fetch_price_safe(pair):
-    """Fetches price with a STRICT 2-second timeout to prevent freezing."""
+    """
+    Fetches REAL price. NO timeout.
+    We use to_thread so it doesn't block the WebSocket heartbeat.
+    """
     try:
-        # 🔥 CRITICAL FIX: The timeout=2.0 ensures the backend NEVER hangs
-        return await asyncio.wait_for(
-            asyncio.to_thread(weex_bot.get_market_price, pair),
-            timeout=2.0 
-        )
-    except asyncio.TimeoutError:
-        return None # Too slow? Skip it and keep the dashboard alive.
+        # We wait as long as needed. No 'wait_for' timeout here.
+        return await asyncio.to_thread(weex_bot.get_market_price, pair)
     except:
         return None
 
 async def fetch_all_prices():
     """
-    Fetches prices with concurrent execution + timeouts.
+    Fetches ALL prices in parallel threads.
+    This fixes the '11s delay' naturally by running 12 requests at once.
     """
     tasks = []
     for pair in ALLOWED_PAIRS:
-        task = asyncio.create_task(fetch_price_safe(pair))
-        tasks.append(task)
-        # Tiny stagger to avoid API rate limits (429 Too Many Requests)
+        tasks.append(fetch_price_safe(pair))
+        # Tiny 0.05s stagger prevents '429 Rate Limit' errors from Exchange
         await asyncio.sleep(0.05) 
     
-    # Wait for all tasks (max 2 seconds each due to timeout above)
     results = await asyncio.gather(*tasks, return_exceptions=True)
     
     price_map = {}
+    
     for pair, result in zip(ALLOWED_PAIRS, results):
-        if result is not None and not isinstance(result, Exception):
-            price_map[pair] = result
+        if result is not None and not isinstance(result, Exception) and isinstance(result, (int, float)):
+            price_map[pair] = float(result)
+            last_known_prices[pair] = float(result) # Save valid price to memory
+        elif pair in last_known_prices:
+            # Fallback: Use the last REAL price we saw (never send 0 or blank)
+            price_map[pair] = last_known_prices[pair]
+            
     return price_map
 
 async def execute_trade(action, pair, amount, price, reason):
     """Handles both SIMULATION and LIVE execution."""
     if LIVE_TRADING:
-        if action == "BUY":
-            # await asyncio.to_thread(weex_bot.create_market_buy, pair, amount) 
-            pass 
-        elif action == "SELL":
-            # await asyncio.to_thread(weex_bot.create_market_sell, pair, amount)
-            pass
+        # ⚠️ REAL MONEY EXECUTION
+        # if action == "BUY": await asyncio.to_thread(weex_bot.create_market_buy, pair, amount) 
+        pass 
     
     # Update Wallet
     if action == "BUY":
@@ -157,7 +159,7 @@ async def execute_trade(action, pair, amount, price, reason):
         SIMULATED_WALLET["in_positions"] -= entry["size"]
         del active_positions[pair]
     
-    save_wallet() # ✅ Feature Confirmed
+    save_wallet() 
     save_nexus_log(pair, action, "TRADE", price, reason)
 
 # --- 📡 WEBSOCKET LOOP ---
@@ -165,18 +167,18 @@ async def execute_trade(action, pair, amount, price, reason):
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print(f"⚡ NEXUS-7 ONLINE: PARALLEL ENGINE ACTIVE")
+    print(f"⚡ NEXUS-7 ONLINE: PURE REAL-TIME ENGINE ACTIVE")
     
     try:
         while True:
             loop_start = time.time()
             
-            # 1. ⚡ FETCH ALL PRICES (FAST & SAFE)
+            # 1. ⚡ FETCH REAL PRICES (PARALLEL)
             prices = await fetch_all_prices()
             
-            # If fetch fails (network down), we skip this loop to prevent crashing
+            # If completely empty (network down), retry immediately
             if not prices:
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.1)
                 continue
 
             # 2. 🛡️ GLOBAL VETO CHECK (BTC)
@@ -204,7 +206,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     pnl_dollar = entry["size"] * pct * LEVERAGE
                     active_positions[pair]["unrealized_pnl"] = pnl_dollar 
                     
-                    # Exit Logic (Fast Profit Taking)
+                    # Exit Logic 
                     should_sell = False
                     sell_reason = ""
                     trend_weak = len(history) >= 5 and current_price < (sum(history[-5:])/5)
@@ -288,7 +290,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 }
                 
                 await websocket.send_text(json.dumps(payload))
-                await asyncio.sleep(0.02) # Prevent frontend freeze
+                # Critical for smooth UI
+                await asyncio.sleep(0.01)
 
             # End of Cycle
             elapsed = time.time() - loop_start
