@@ -3,12 +3,20 @@ import asyncio
 import json
 import csv
 import os
+import time
 from collections import deque
 from datetime import datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from weex_client import weex_bot
+from weex_client import weex_bot  # Assuming this handles your API calls
+
+# --- ⚙️ CONFIGURATION & RISK MANAGEMENT ---
+LIVE_TRADING = False          # ⚠️ SET TO TRUE TO TRADE REAL MONEY
+LEVERAGE = 10
+BET_PERCENTAGE = 0.15         # 15% of Wallet per trade
+HISTORY_SIZE = 50             # Ticks (approx 25-50 seconds of data)
+LOOP_DELAY = 0.5              # fast loop (0.5s)
 
 # ✅ APPROVED "HIGH BETA" MAJORS
 ALLOWED_PAIRS = [
@@ -17,30 +25,20 @@ ALLOWED_PAIRS = [
     "AVAXUSDT", "LINKUSDT", "DOTUSDT", "LTCUSDT"
 ]
 
-# --- 🎯 NEXUS 7 CONFIGURATION ---
-LEVERAGE = 10             
-BET_PERCENTAGE = 0.15    # 15% of Wallet per trade
-HISTORY_SIZE = 50        
-
-# --- 📉 FALL LOGIC: THE SNIPER LADDER ---
+# --- 📉 STRATEGY LOGIC ---
 DIP_THRESHOLDS = [0.005, 0.017, 0.02, 0.04, 0.06]
-
-# --- 🚀 RIDE LOGIC: MOMENTUM TRIGGER ---
-MOMENTUM_THRESHOLD = 1.015  # Price is 1.5% above average
-RSI_OVERBOUGHT = 75         # Safety Ceiling
+MOMENTUM_THRESHOLD = 1.015
+RSI_OVERBOUGHT = 75
 
 LOG_FILE = "nexus7_logs.csv"
-WALLET_FILE = "wallet_data.json" 
+WALLET_FILE = "wallet_data.json"
 
-# Store price history for logic calculations
+# --- 🧠 STATE MEMORY ---
 price_history = {pair: deque(maxlen=HISTORY_SIZE) for pair in ALLOWED_PAIRS}
-active_positions = {}    
+active_positions = {} 
+SIMULATED_WALLET = {} # Loaded below
 
 app = FastAPI()
-
-@app.api_route("/", methods=["GET", "HEAD"])
-def health_check():
-    return {"status": "active", "system": "Nexus-7 Smart Sniper", "version": "3.6-SMART_LADDER"}
 
 app.add_middleware(
     CORSMiddleware,
@@ -50,14 +48,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- 🧮 MATH HELPER: RSI CALCULATION ---
+# --- 🛠️ HELPER FUNCTIONS ---
+
 def calculate_rsi(prices, period=14):
     if len(prices) < period + 1:
-        return 50 # Default neutral if not enough data
-    
+        return 50
     gains = []
     losses = []
-    
     for i in range(1, len(prices)):
         change = prices[i] - prices[i-1]
         if change > 0:
@@ -66,18 +63,13 @@ def calculate_rsi(prices, period=14):
         else:
             gains.append(0)
             losses.append(abs(change))
-            
     avg_gain = sum(gains[-period:]) / period
     avg_loss = sum(losses[-period:]) / period
-    
     if avg_loss == 0:
-        return 100 
-    
+        return 100
     rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
+    return 100 - (100 / (1 + rs))
 
-# --- 💾 PERSISTENCE FUNCTIONS ---
 def load_wallet():
     if os.path.exists(WALLET_FILE):
         try:
@@ -85,12 +77,7 @@ def load_wallet():
                 return json.load(f)
         except:
             pass
-    return {
-        "total": 1000.00,
-        "available": 1000.00,
-        "in_positions": 0.00,
-        "unrealized_pnl": 0.00
-    }
+    return {"total": 1000.0, "available": 1000.0, "in_positions": 0.0, "unrealized_pnl": 0.0}
 
 def save_wallet():
     try:
@@ -98,8 +85,6 @@ def save_wallet():
             json.dump(SIMULATED_WALLET, f)
     except:
         pass
-
-SIMULATED_WALLET = load_wallet()
 
 def save_nexus_log(symbol, action, type_tag, price, reason):
     try:
@@ -112,227 +97,190 @@ def save_nexus_log(symbol, action, type_tag, price, reason):
     except:
         pass
 
-@app.get("/download-logs")
-def download_logs():
-    if os.path.exists(LOG_FILE):
-        return FileResponse(LOG_FILE, media_type='text/csv', filename="nexus7_logs.csv")
-    return {"error": "No data yet."}
+# Initialize Wallet
+SIMULATED_WALLET = load_wallet()
+
+# --- 🚀 ASYNC CORE (THE SPEED UPGRADE) ---
+
+async def fetch_all_prices():
+    """Fetches ALL prices in parallel. 12x Speed boost."""
+    tasks = [asyncio.to_thread(weex_bot.get_market_price, pair) for pair in ALLOWED_PAIRS]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    # Map results to pairs, filtering out errors
+    price_map = {}
+    for pair, result in zip(ALLOWED_PAIRS, results):
+        if not isinstance(result, Exception) and result is not None:
+            price_map[pair] = result
+    return price_map
+
+async def execute_trade(action, pair, amount, price, reason):
+    """Handles both SIMULATION and LIVE execution."""
+    if LIVE_TRADING:
+        # ⚠️ REAL MONEY EXECUTION
+        if action == "BUY":
+            # await asyncio.to_thread(weex_bot.create_market_buy, pair, amount) 
+            pass # Uncomment above when ready
+        elif action == "SELL":
+            # await asyncio.to_thread(weex_bot.create_market_sell, pair, amount)
+            pass
+    
+    # Always update internal ledger for UI/Logs
+    if action == "BUY":
+        SIMULATED_WALLET["available"] -= amount
+        SIMULATED_WALLET["in_positions"] += amount
+        active_positions[pair] = {"price": price, "size": amount, "type": reason}
+    elif action == "SELL":
+        entry = active_positions[pair]
+        pnl = (amount + entry["unrealized_pnl"]) if "unrealized_pnl" in entry else amount
+        SIMULATED_WALLET["available"] += pnl
+        SIMULATED_WALLET["in_positions"] -= entry["size"]
+        del active_positions[pair]
+    
+    save_wallet()
+    save_nexus_log(pair, action, "TRADE", price, reason)
+
+# --- 📡 WEBSOCKET LOOP ---
 
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print(f"⚡ NEXUS-7 ONLINE: SMART LADDER & GREEN TICK ACTIVE")
-    
-    scan_index = 0
+    print(f"⚡ NEXUS-7 ONLINE: PARALLEL ENGINE ACTIVE")
     
     try:
         while True:
-            # --- 1. GLOBAL MARKET SENSE (BTC VETO) ---
-            btc_price = await asyncio.to_thread(weex_bot.get_market_price, "BTCUSDT")
-            veto_active = False
+            loop_start = time.time()
             
-            if btc_price:
-                price_history["BTCUSDT"].append(btc_price)
-                
-                # Check for Flash Dump (BTC Veto)
-                if len(price_history["BTCUSDT"]) >= 5:
-                    recent_btc = list(price_history["BTCUSDT"])
-                    # If BTC lost > 0.3% in last 5 ticks -> DANGER
-                    if recent_btc[-1] < recent_btc[0] * 0.997:
-                        veto_active = True
-
-            # --- 2. TARGET SELECTION ---
-            target_pair = ALLOWED_PAIRS[scan_index]
-            scan_index = (scan_index + 1) % len(ALLOWED_PAIRS)
-            
-            current_price = await asyncio.to_thread(weex_bot.get_market_price, target_pair)
-
-            if current_price is None:
+            # 1. ⚡ FETCH ALL PRICES (PARALLEL)
+            prices = await fetch_all_prices()
+            if not prices:
                 await asyncio.sleep(0.5)
                 continue
 
-            price_history[target_pair].append(current_price)
-            history_list = list(price_history[target_pair])
+            # 2. 🛡️ GLOBAL VETO CHECK (BTC)
+            veto_active = False
+            if "BTCUSDT" in prices:
+                btc_price = prices["BTCUSDT"]
+                price_history["BTCUSDT"].append(btc_price)
+                if len(price_history["BTCUSDT"]) >= 5:
+                    recent_btc = list(price_history["BTCUSDT"])
+                    # If BTC dumps 0.3% in last ~2.5 seconds (FAST reaction)
+                    if recent_btc[-1] < recent_btc[0] * 0.997:
+                        veto_active = True
+
+            # 3. 🧠 PROCESS ALL PAIRS (ATOMIC SWEEP)
+            current_log = {"type": "HEARTBEAT", "message": "Scanning..."}
             
-            log_type = "SCAN"
-            log_msg = f"Scanning {target_pair}..."
-            
-            # Helper: Calculate status for Frontend
-            veto_status = "RED" if veto_active else "GREEN"
-
-            # --- 🛡️ MANAGE ACTIVE POSITIONS ---
-            if target_pair in active_positions:
-                entry_data = active_positions[target_pair]
-                entry_price = entry_data["price"]
-                position_size = entry_data["size"] 
-
-                pct_change = (current_price - entry_price) / entry_price
-                pnl_dollar = position_size * pct_change * LEVERAGE
+            for pair, current_price in prices.items():
+                price_history[pair].append(current_price)
+                history = list(price_history[pair])
                 
-                # Update Wallet State
-                SIMULATED_WALLET["unrealized_pnl"] = pnl_dollar
-                SIMULATED_WALLET["total"] = SIMULATED_WALLET["available"] + SIMULATED_WALLET["in_positions"] + pnl_dollar
+                # A. MANAGE EXISTING POSITIONS
+                if pair in active_positions:
+                    entry = active_positions[pair]
+                    pct = (current_price - entry["price"]) / entry["price"]
+                    pnl_dollar = entry["size"] * pct * LEVERAGE
+                    active_positions[pair]["unrealized_pnl"] = pnl_dollar # Temp store
+                    
+                    # Exit Logic
+                    should_sell = False
+                    sell_reason = ""
+                    
+                    trend_weak = False
+                    if len(history) >= 5 and current_price < (sum(history[-5:])/5):
+                        trend_weak = True
 
-                should_sell = False
-                sell_reason = ""
+                    if pct <= -0.02: 
+                        should_sell = True; sell_reason = "Loss Cut (-2%)"
+                    elif pct >= 0.06: 
+                        should_sell = True; sell_reason = "Jackpot (+6%)"
+                    elif pct >= 0.04 and trend_weak: 
+                        should_sell = True; sell_reason = "Secure +4% (Weak)"
+                    elif pct >= 0.02 and trend_weak: 
+                        should_sell = True; sell_reason = "Scalp +2% (Weak)"
 
-                # --- 🧠 SMART LADDER LOGIC (Dynamic Exits) ---
-                # Check trend strength (Average of last 5 ticks vs Current Price)
-                trend_is_weak = False
-                if len(history_list) >= 5:
-                    recent_avg = sum(history_list[-5:]) / 5
-                    if current_price < recent_avg:
-                        trend_is_weak = True # Momentum is dying
+                    if should_sell:
+                        await execute_trade("SELL", pair, entry["size"], current_price, sell_reason)
+                        current_log = {"type": "SELL", "message": f"💰 SOLD {pair}: {sell_reason}"}
 
-                # STOP LOSS (-2%) - Hard Safety
-                if pct_change <= -0.02: 
-                    should_sell = True
-                    sell_reason = "Loss Cut (-2%)"
-                    log_type = "SELL_LOSS"
+                # B. HUNT NEW TRADES
+                elif len(history) >= 20:
+                    # Metrics
+                    recent_high = max(history)
+                    pullback_pct = (recent_high - current_price) / recent_high
+                    momentum = (sum(history[-3:])/3) / (sum(history[-20:])/20)
+                    rsi = calculate_rsi(history)
+                    
+                    buy_signal = False
+                    buy_type = ""
+                    buy_note = ""
 
-                # LEVEL 3: JACKPOT (+6%) - Always Sell
-                elif pct_change >= 0.06:
-                    should_sell = True
-                    sell_reason = "Jackpot (+6%)"
-                    log_type = "SELL_PROFIT"
-
-                # LEVEL 2: SECURE (+4%) - Sell ONLY if trend is weak
-                elif pct_change >= 0.04:
-                    if trend_is_weak:
-                        should_sell = True
-                        sell_reason = "Secure +4% (Trend Fading)"
-                        log_type = "SELL_PROFIT"
-                    else:
-                        log_msg = f"🚀 {target_pair} at +4%... Strong Trend! Holding for 6%"
-
-                # LEVEL 1: SCALP (+2%) - Sell ONLY if trend is weak
-                elif pct_change >= 0.02:
-                    if trend_is_weak:
-                        should_sell = True
-                        sell_reason = "Secure +2% (Trend Fading)"
-                        log_type = "SELL_PROFIT"
-                    else:
-                        log_msg = f"🟢 {target_pair} at +2%... Strong Trend! Holding for 4%"
-
-                # EXECUTE SELL
-                if should_sell:
-                    SIMULATED_WALLET["available"] += (position_size + pnl_dollar)
-                    SIMULATED_WALLET["in_positions"] -= position_size
-                    del active_positions[target_pair]
-                    save_wallet()
-                    save_nexus_log(target_pair, "SELL", log_type, current_price, sell_reason)
-                    log_msg = f"💰 SOLD {target_pair}: {sell_reason}"
-
-            # --- 🔭 SEARCH FOR NEW TRADES ---
-            elif len(history_list) >= 20:
-                
-                # METRICS
-                recent_high = max(history_list)
-                pullback_pct = (recent_high - current_price) / recent_high
-                
-                short_ma = sum(history_list[-3:]) / 3    
-                long_ma = sum(history_list[-20:]) / 20   
-                momentum_score = short_ma / long_ma
-                
-                # RSI CALC
-                rsi_val = calculate_rsi(history_list)
-
-                buy_signal = False
-                buy_reason = ""
-                buy_type = ""
-
-                # 🔥 1. THE "RIDE" (High Momentum + RSI SAFE)
-                if momentum_score > MOMENTUM_THRESHOLD:
-                    if rsi_val < RSI_OVERBOUGHT:
+                    # Strategy 1: RIDE
+                    if momentum > MOMENTUM_THRESHOLD and rsi < RSI_OVERBOUGHT:
                         buy_signal = True
-                        buy_reason = f"🚀 RIDE: Mtm {momentum_score:.3f} | RSI {rsi_val:.1f}"
                         buy_type = "MOMENTUM_BUY"
-                    else:
-                        log_msg = f"⚠️ RIDE Skipped: RSI Overheated ({rsi_val:.1f})"
+                        buy_note = f"RIDE: Mtm {momentum:.3f}"
 
-                # 📉 2. THE "FALL" (Sniper Ladder + GREEN TICK)
-                if not buy_signal:
-                    for threshold in DIP_THRESHOLDS:
-                        upper_limit = threshold + 0.003 
-                        
-                        if threshold <= pullback_pct < upper_limit:
-                            
-                            # --- 🧠 SMART CHECK: THE GREEN TICK ---
-                            if threshold == 0.005:
-                                last_price_check = history_list[-2] if len(history_list) > 1 else current_price
-                                
-                                if current_price <= last_price_check:
-                                    log_msg = f"📉 {target_pair} at 0.5% dip, waiting for CURL..."
-                                    break 
-                                else:
-                                    buy_signal = True
-                                    buy_reason = f"✅ CURL: Sniped {threshold*100}% Dip on Bounce"
-                                    buy_type = "DIP_BUY"
-                                    break
-                            
-                            else:
-                                # For deeper dips (1.7%+), just buy
+                    # Strategy 2: FALL (Ladder)
+                    if not buy_signal:
+                        for threshold in DIP_THRESHOLDS:
+                            if threshold <= pullback_pct < (threshold + 0.003):
+                                # Green Tick Confirmation
+                                last_p = history[-2] if len(history)>1 else current_price
+                                if threshold == 0.005 and current_price <= last_p:
+                                    continue # Wait for curl
                                 buy_signal = True
-                                buy_reason = f"📉 FALL: Sniped {threshold*100}% Dip"
                                 buy_type = "DIP_BUY"
+                                buy_note = f"SNIPED {threshold*100}% DIP"
                                 break
 
-                # 🚫 BTC VETO OVERRIDE
-                if buy_signal:
-                    if veto_active and target_pair != "BTCUSDT":
-                        buy_signal = False
-                        log_msg = f"🛡️ BTC VETO BLOCKED: Market Unsafe"
-                        log_type = "VETO_BLOCK"
+                    # Execution
+                    if buy_signal:
+                        if veto_active and pair != "BTCUSDT":
+                             current_log = {"type": "VETO", "message": f"🛡️ VETO BLOCKED {pair}"}
+                        else:
+                            bet = SIMULATED_WALLET["available"] * BET_PERCENTAGE
+                            if bet >= 10:
+                                await execute_trade("BUY", pair, bet, current_price, buy_type)
+                                current_log = {"type": "BUY", "message": f"⚡ BOUGHT {pair}: {buy_note}"}
 
-                # ✅ EXECUTE BUY
-                if buy_signal:
-                    bet_amount = SIMULATED_WALLET["available"] * BET_PERCENTAGE
-                    if bet_amount >= 10:
-                        SIMULATED_WALLET["available"] -= bet_amount
-                        SIMULATED_WALLET["in_positions"] += bet_amount
-                        
-                        active_positions[target_pair] = {
-                            "price": current_price,
-                            "size": bet_amount,
-                            "type": buy_type
-                        }
-                        
-                        save_wallet()
-                        save_nexus_log(target_pair, "BUY", buy_type, current_price, buy_reason)
-                        log_msg = f"⚡ ORDER EXECUTED: {buy_reason}"
-                        log_type = "EXECUTION"
+            # 4. 📊 BROADCAST STATUS
+            total_unrealized = sum(p.get("unrealized_pnl", 0) for p in active_positions.values())
+            SIMULATED_WALLET["unrealized_pnl"] = total_unrealized
+            SIMULATED_WALLET["total"] = SIMULATED_WALLET["available"] + SIMULATED_WALLET["in_positions"] + total_unrealized
 
-            # --- 📡 BROADCAST UPDATE ---
-            active_trades_list = []
-            for sym, entry in active_positions.items():
-                p_now = price_history[sym][-1] if len(price_history[sym]) > 0 else entry["price"]
-                pnl = (p_now - entry["price"]) / entry["price"] * 100
-                active_trades_list.append({"symbol": sym, "pnl": round(pnl, 2), "type": entry.get("type", "UNK")})
+            positions_list = [
+                {"symbol": k, "pnl": round((v.get("unrealized_pnl",0)/v["size"])*100/LEVERAGE, 2), "type": v["type"]}
+                for k, v in active_positions.items()
+            ]
 
-            wallet_payload = {
-                "total": round(SIMULATED_WALLET["total"], 2),
-                "available": round(SIMULATED_WALLET["available"], 2),
-                "inPositions": round(SIMULATED_WALLET["in_positions"], 2),
-                "positions": active_trades_list
+            payload = {
+                "timestamp": datetime.now().strftime("%H:%M:%S"),
+                "veto_status": "RED" if veto_active else "GREEN",
+                "log": current_log,
+                "wallet": {
+                    "total": round(SIMULATED_WALLET["total"], 2),
+                    "available": round(SIMULATED_WALLET["available"], 2),
+                    "positions": positions_list
+                }
             }
             
-            data = {
-                "timestamp": datetime.now().strftime("%H:%M:%S"),
-                "symbol": target_pair,
-                "price": current_price,
-                "type": log_type,
-                "message": log_msg,
-                "veto_status": veto_status, 
-                "wallet": wallet_payload 
-            }
-            await websocket.send_text(json.dumps(data))
-            await asyncio.sleep(1.0) 
+            await websocket.send_text(json.dumps(payload))
+            
+            # Maintain Loop Speed
+            elapsed = time.time() - loop_start
+            sleep_time = max(0, LOOP_DELAY - elapsed)
+            await asyncio.sleep(sleep_time)
 
     except WebSocketDisconnect:
         print("❌ Client Disconnected")
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"🔥 Critical Error: {e}")
         await asyncio.sleep(1)
+
+@app.api_route("/", methods=["GET"])
+def health():
+    return {"status": "active", "mode": "LIVE" if LIVE_TRADING else "SIMULATION"}
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
