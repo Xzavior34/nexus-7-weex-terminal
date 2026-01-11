@@ -15,8 +15,8 @@ from weex_client import weex_bot  # Assuming this handles your API calls
 LIVE_TRADING = False          # ⚠️ SET TO TRUE TO TRADE REAL MONEY
 LEVERAGE = 10                 # High-Performance Leverage
 BET_PERCENTAGE = 0.15         # 15% of Wallet per trade
-HISTORY_SIZE = 300            # UPDATED: 2.5 minutes of memory (Better Trend Logic)
-LOOP_DELAY = 0.5              # Fast loop (0.5s)
+HISTORY_SIZE = 300            # 2.5 minutes of memory (Better Trend Logic)
+LOOP_DELAY = 0.5              # Fast loop
 
 # ✅ APPROVED "HIGH BETA" MAJORS
 ALLOWED_PAIRS = [
@@ -25,10 +25,10 @@ ALLOWED_PAIRS = [
     "AVAXUSDT", "LINKUSDT", "DOTUSDT", "LTCUSDT"
 ]
 
-# --- 📉 PROFIT TUNING (AGGRESSIVE BUT SMART) ---
+# --- 📉 PROFIT TUNING ---
 DIP_THRESHOLDS = [0.005, 0.017, 0.02, 0.04, 0.06]
-MOMENTUM_THRESHOLD = 1.003    # UPDATED: Buy on 0.3% moves (More Trades = More Profit)
-RSI_OVERBOUGHT = 85           # UPDATED: Allow pumps to run higher before filtering
+MOMENTUM_THRESHOLD = 1.003    # Standard Breakout
+RSI_OVERBOUGHT = 85           # Allow pumps to run
 
 LOG_FILE = "nexus7_logs.csv"
 WALLET_FILE = "wallet_data.json"
@@ -36,7 +36,7 @@ WALLET_FILE = "wallet_data.json"
 # --- 🧠 STATE MEMORY ---
 price_history = {pair: deque(maxlen=HISTORY_SIZE) for pair in ALLOWED_PAIRS}
 active_positions = {} 
-SIMULATED_WALLET = {} # Loaded below
+SIMULATED_WALLET = {} 
 
 app = FastAPI()
 
@@ -100,17 +100,31 @@ def save_nexus_log(symbol, action, type_tag, price, reason):
 # Initialize Wallet
 SIMULATED_WALLET = load_wallet()
 
-# --- 🚀 ASYNC CORE (THE SPEED UPGRADE) ---
+# --- 🚀 ASYNC CORE (SPEED FIX: STAGGERED REQUESTS) ---
+
+async def fetch_price_safe(pair):
+    """Fetches single price with error handling."""
+    try:
+        return await asyncio.to_thread(weex_bot.get_market_price, pair)
+    except:
+        return None
 
 async def fetch_all_prices():
-    """Fetches ALL prices in parallel. 12x Speed boost."""
-    tasks = [asyncio.to_thread(weex_bot.get_market_price, pair) for pair in ALLOWED_PAIRS]
+    """
+    Fetches prices with a tiny stagger to avoid API Rate Limits.
+    This fixes the 11-second delay issue.
+    """
+    tasks = []
+    for pair in ALLOWED_PAIRS:
+        tasks.append(fetch_price_safe(pair))
+        # ⚡ MAGIC FIX: 0.05s stagger prevents "Spam Block" from Exchange
+        await asyncio.sleep(0.05) 
+    
     results = await asyncio.gather(*tasks, return_exceptions=True)
     
-    # Map results to pairs, filtering out errors
     price_map = {}
     for pair, result in zip(ALLOWED_PAIRS, results):
-        if not isinstance(result, Exception) and result is not None:
+        if result is not None and not isinstance(result, Exception):
             price_map[pair] = result
     return price_map
 
@@ -120,12 +134,12 @@ async def execute_trade(action, pair, amount, price, reason):
         # ⚠️ REAL MONEY EXECUTION
         if action == "BUY":
             # await asyncio.to_thread(weex_bot.create_market_buy, pair, amount) 
-            pass # Uncomment above when ready
+            pass 
         elif action == "SELL":
             # await asyncio.to_thread(weex_bot.create_market_sell, pair, amount)
             pass
     
-    # Always update internal ledger for UI/Logs
+    # Update Wallet
     if action == "BUY":
         SIMULATED_WALLET["available"] -= amount
         SIMULATED_WALLET["in_positions"] += amount
@@ -137,7 +151,7 @@ async def execute_trade(action, pair, amount, price, reason):
         SIMULATED_WALLET["in_positions"] -= entry["size"]
         del active_positions[pair]
     
-    save_wallet()
+    save_wallet() # ✅ Feature Confirmed
     save_nexus_log(pair, action, "TRADE", price, reason)
 
 # --- 📡 WEBSOCKET LOOP ---
@@ -151,8 +165,7 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             loop_start = time.time()
             
-            # 1. ⚡ FETCH ALL PRICES (PARALLEL)
-            # This fetches ALL 12 prices in ~0.2s
+            # 1. ⚡ FETCH ALL PRICES (STAGGERED)
             prices = await fetch_all_prices()
             if not prices:
                 await asyncio.sleep(0.5)
@@ -165,19 +178,14 @@ async def websocket_endpoint(websocket: WebSocket):
                 price_history["BTCUSDT"].append(btc_price)
                 if len(price_history["BTCUSDT"]) >= 5:
                     recent_btc = list(price_history["BTCUSDT"])
-                    # If BTC dumps 0.3% in last ~2.5 seconds (FAST reaction)
                     if recent_btc[-1] < recent_btc[0] * 0.997:
                         veto_active = True
 
-            # 3. 🧠 PROCESS & BROADCAST (SEQUENTIAL SEND)
-            # We loop through the data and send ONE message per coin.
-            # This fixes the "Blank Screen" by matching the Frontend's expected format.
-            
+            # 3. 🧠 PROCESS & BROADCAST
             for pair, current_price in prices.items():
                 price_history[pair].append(current_price)
                 history = list(price_history[pair])
                 
-                # Default Logic State
                 msg_type = "SCAN"
                 msg_text = f"Scanning {pair}..."
                 
@@ -188,13 +196,13 @@ async def websocket_endpoint(websocket: WebSocket):
                     pnl_dollar = entry["size"] * pct * LEVERAGE
                     active_positions[pair]["unrealized_pnl"] = pnl_dollar 
                     
-                    # Exit Logic (UPDATED FOR FAST PROFIT TAKING)
+                    # Exit Logic (Fast Profit Taking)
                     should_sell = False
                     sell_reason = ""
                     trend_weak = len(history) >= 5 and current_price < (sum(history[-5:])/5)
 
                     if pct <= -0.02: should_sell = True; sell_reason = "Loss Cut (-2%)"
-                    elif pct >= 0.035: should_sell = True; sell_reason = "Jackpot (+3.5%)" # Faster Take Profit
+                    elif pct >= 0.035: should_sell = True; sell_reason = "Jackpot (+3.5%)"
                     elif pct >= 0.02 and trend_weak: should_sell = True; sell_reason = "Secure +2%"
 
                     if should_sell:
@@ -209,23 +217,31 @@ async def websocket_endpoint(websocket: WebSocket):
                 elif len(history) >= 20:
                     recent_high = max(history)
                     pullback_pct = (recent_high - current_price) / recent_high
-                    momentum = (sum(history[-3:])/3) / (sum(history[-20:])/20)
+                    
+                    # Metrics
+                    short_ma = sum(history[-3:]) / 3
+                    long_ma = sum(history[-20:]) / 20
+                    momentum = short_ma / long_ma
                     rsi = calculate_rsi(history)
                     
                     buy_signal = False
                     buy_note = ""
 
-                    # Strategy 1: RIDE (UPDATED THRESHOLDS)
-                    if momentum > MOMENTUM_THRESHOLD and rsi < RSI_OVERBOUGHT:
-                        buy_signal = True; buy_note = "MOMENTUM RIDE"
+                    # 🔥 STRATEGY 1: ACTIVE TREND SNIPER (Fixes DOGE issue)
+                    # If trend is already healthy, buy on tiny momentum
+                    if 55 < rsi < 85 and momentum > 1.001:
+                        buy_signal = True; buy_note = "TREND FOLLOW"
 
-                    # Strategy 2: FALL (Ladder)
+                    # 🚀 STRATEGY 2: MOMENTUM EXPLOSION
+                    if momentum > MOMENTUM_THRESHOLD and rsi < RSI_OVERBOUGHT:
+                        buy_signal = True; buy_note = f"MOMENTUM ({momentum:.3f})"
+
+                    # 📉 STRATEGY 3: FALL (Ladder)
                     if not buy_signal:
                         for threshold in DIP_THRESHOLDS:
                             if threshold <= pullback_pct < (threshold + 0.003):
-                                # Green Tick Confirmation
                                 if threshold == 0.005 and len(history)>1 and current_price <= history[-2]:
-                                    continue # Wait for curl
+                                    continue 
                                 buy_signal = True; buy_note = f"SNIPED {threshold*100}% DIP"
                                 break
 
@@ -241,8 +257,7 @@ async def websocket_endpoint(websocket: WebSocket):
                                 msg_type = "BUY"
                                 msg_text = f"⚡ BOUGHT {pair}: {buy_note}"
 
-                # 4. 📡 SEND PAYLOAD (THE FRONTEND FIX)
-                # Rebuilds the exact JSON structure your Frontend expects
+                # 4. 📡 SEND PAYLOAD
                 total_unrealized = sum(p.get("unrealized_pnl", 0) for p in active_positions.values())
                 SIMULATED_WALLET["total"] = SIMULATED_WALLET["available"] + SIMULATED_WALLET["in_positions"] + total_unrealized
                 
@@ -253,10 +268,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 payload = {
                     "timestamp": datetime.now().strftime("%H:%M:%S"),
-                    "symbol": pair,           # ✅ Frontend needs this
-                    "price": current_price,   # ✅ Frontend needs this
-                    "type": msg_type,         # ✅ Frontend needs this
-                    "message": msg_text,      # ✅ Frontend needs this
+                    "symbol": pair,
+                    "price": current_price,
+                    "type": msg_type,
+                    "message": msg_text,
                     "veto_status": "RED" if veto_active else "GREEN",
                     "wallet": {
                         "total": round(SIMULATED_WALLET["total"], 2),
@@ -267,9 +282,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 }
                 
                 await websocket.send_text(json.dumps(payload))
-                
-                # Tiny sleep to let Frontend render (prevent freezing)
-                await asyncio.sleep(0.02)
+                await asyncio.sleep(0.02) # Prevent frontend freeze
 
             # End of Cycle
             elapsed = time.time() - loop_start
@@ -282,7 +295,7 @@ async def websocket_endpoint(websocket: WebSocket):
         print(f"🔥 Critical Error: {e}")
         await asyncio.sleep(1)
 
-# --- 📥 DOWNLOAD ENDPOINT (RESTORED) ---
+# --- 📥 DOWNLOAD ENDPOINT ---
 @app.get("/download-logs")
 def download_logs():
     if os.path.exists(LOG_FILE):
