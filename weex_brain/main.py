@@ -1,14 +1,12 @@
 import uvicorn
 import asyncio
 import json
-import csv
 import os
 import time
 from collections import deque
 from datetime import datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from weex_client import weex_bot
 
 # --- ⚙️ CONFIGURATION & RISK ---
@@ -26,12 +24,11 @@ ALLOWED_PAIRS = [
 
 # --- 📉 STRATEGY TUNING ---
 MOMENTUM_THRESHOLD = 1.004  
-STOP_LOSS_PCT = 0.02         # Initial 2% Stop Loss
-TRAILING_DISTANCE = 0.01     # Trail 1% behind peaks
-BREAK_EVEN_TRIGGER = 0.015   # Move to Break-even at +1.5% profit
-PARTIAL_TAKE_PROFIT = 0.025  # Sell 30% at +2.5%
+STOP_LOSS_PCT = 0.02         
+TRAILING_DISTANCE = 0.01     
+BREAK_EVEN_TRIGGER = 0.015   
+PARTIAL_TAKE_PROFIT = 0.025  
 
-LOG_FILE = "nexus7_logs.csv"
 WALLET_FILE = "wallet_data.json"
 
 # --- 🧠 STATE MEMORY ---
@@ -63,7 +60,8 @@ async def fetch_all_prices():
         if isinstance(result, (int, float)):
             price_map[pair] = float(result)
             last_known_prices[pair] = float(result)
-        elif pair in last_known_prices: price_map[pair] = last_known_prices[pair]
+        elif pair in last_known_prices: 
+            price_map[pair] = last_known_prices[pair]
     return price_map
 
 @app.websocket("/ws/stream")
@@ -71,10 +69,23 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     print("⚡ NEXUS-7 PRO v2.1: RISK GUARD ACTIVE")
     
+    # --- 💓 HEARTBEAT TASK ---
+    # Keeps Render from timing out during quiet markets
+    async def keep_alive():
+        try:
+            while True:
+                await websocket.send_json({"type": "ping", "message": "HEARTBEAT"})
+                await asyncio.sleep(20) 
+        except:
+            pass
+
+    heartbeat_task = asyncio.create_task(keep_alive())
+    
     try:
         while True:
             loop_start = time.time()
             prices = await fetch_all_prices()
+            
             if not prices:
                 await asyncio.sleep(0.1); continue
 
@@ -96,15 +107,12 @@ async def websocket_endpoint(websocket: WebSocket):
                     pos = active_positions[pair]
                     pct = (current_price - pos["price"]) / pos["price"]
                     
-                    # Update High Water Mark for Trailing
                     if current_price > pos.get("high_price", 0):
                         active_positions[pair]["high_price"] = current_price
                     
-                    # 1. Trailing Stop Logic
                     trail_stop = pos.get("high_price", 0) * (1 - TRAILING_DISTANCE)
-                    
-                    # 2. Sell Logic
                     should_sell, reason = False, ""
+                    
                     if current_price <= pos["stop_loss"]: should_sell, reason = True, "Stop Loss"
                     elif pct >= 0.035: should_sell, reason = True, "Max Take Profit"
                     elif pct >= BREAK_EVEN_TRIGGER and pos["stop_loss"] < pos["price"]:
@@ -159,9 +167,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_text(json.dumps(payload))
                 await asyncio.sleep(0.01)
 
-            await asyncio.sleep(max(0, LOOP_DELAY - (time.time() - loop_start)))
+            elapsed = time.time() - loop_start
+            await asyncio.sleep(max(0, LOOP_DELAY - elapsed))
 
-    except WebSocketDisconnect: print("❌ LINK SEVERED")
+    except WebSocketDisconnect: 
+        print("❌ LINK SEVERED")
+    finally:
+        heartbeat_task.cancel() # Shut down heartbeat when link is dead
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
