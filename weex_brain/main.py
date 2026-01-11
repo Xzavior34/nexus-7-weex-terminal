@@ -100,30 +100,33 @@ def save_nexus_log(symbol, action, type_tag, price, reason):
 # Initialize Wallet
 SIMULATED_WALLET = load_wallet()
 
-# --- 🚀 ASYNC CORE (SPEED FIX: TRUE STAGGERED EXECUTION) ---
+# --- 🚀 ASYNC CORE (SPEED FIX: HARD TIMEOUT) ---
 
 async def fetch_price_safe(pair):
-    """Fetches single price with error handling."""
+    """Fetches price with a STRICT 2-second timeout."""
     try:
-        return await asyncio.to_thread(weex_bot.get_market_price, pair)
+        # 🔥 MAGIC FIX: If WEEX doesn't answer in 2s, we KILL the request.
+        # This prevents the 11s hang.
+        return await asyncio.wait_for(
+            asyncio.to_thread(weex_bot.get_market_price, pair),
+            timeout=2.0 
+        )
+    except asyncio.TimeoutError:
+        return None # Too slow? Skip it.
     except:
         return None
 
 async def fetch_all_prices():
     """
-    Fetches prices by scheduling tasks 0.05s apart.
-    This creates a smooth stream of requests instead of a 'batch slam',
-    preventing the 11-second API block.
+    Fetches prices with concurrent execution + timeouts.
     """
     tasks = []
     for pair in ALLOWED_PAIRS:
-        # Schedule the task immediately
         task = asyncio.create_task(fetch_price_safe(pair))
         tasks.append(task)
-        # Wait a tiny bit before scheduling the next one
+        # Tiny stagger to avoid API rate limits (429 Too Many Requests)
         await asyncio.sleep(0.05) 
     
-    # Wait for all scheduled tasks to complete
     results = await asyncio.gather(*tasks, return_exceptions=True)
     
     price_map = {}
@@ -135,7 +138,6 @@ async def fetch_all_prices():
 async def execute_trade(action, pair, amount, price, reason):
     """Handles both SIMULATION and LIVE execution."""
     if LIVE_TRADING:
-        # ⚠️ REAL MONEY EXECUTION
         if action == "BUY":
             # await asyncio.to_thread(weex_bot.create_market_buy, pair, amount) 
             pass 
@@ -169,9 +171,10 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             loop_start = time.time()
             
-            # 1. ⚡ FETCH ALL PRICES (STAGGERED)
+            # 1. ⚡ FETCH ALL PRICES (FAST)
             prices = await fetch_all_prices()
             if not prices:
+                # If everything failed, wait briefly and retry
                 await asyncio.sleep(0.5)
                 continue
 
@@ -222,7 +225,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     recent_high = max(history)
                     pullback_pct = (recent_high - current_price) / recent_high
                     
-                    # Metrics
                     short_ma = sum(history[-3:]) / 3
                     long_ma = sum(history[-20:]) / 20
                     momentum = short_ma / long_ma
@@ -231,9 +233,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     buy_signal = False
                     buy_note = ""
 
-                    # 🔥 STRATEGY 1: ACTIVE TREND SNIPER (TUNED)
-                    # OLD: 1.001 (Too noisy, buys everything)
-                    # NEW: 1.004 (Requires 0.4% move - Filters out the weak "Red" trades)
+                    # 🔥 STRATEGY 1: ACTIVE TREND SNIPER
+                    # Updated to 1.004 to reduce "Red" trades
                     if 55 < rsi < 85 and momentum > 1.004:
                         buy_signal = True; buy_note = "TREND FOLLOW"
 
@@ -287,7 +288,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 }
                 
                 await websocket.send_text(json.dumps(payload))
-                await asyncio.sleep(0.02) # Prevent frontend freeze
+                await asyncio.sleep(0.02) 
 
             # End of Cycle
             elapsed = time.time() - loop_start
