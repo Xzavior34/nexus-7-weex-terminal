@@ -18,12 +18,11 @@ ALLOWED_PAIRS = [
 ]
 
 # --- 🎯 NEXUS 7 CONFIGURATION ---
-LEVERAGE = 10            
+LEVERAGE = 10             
 BET_PERCENTAGE = 0.15    # 15% of Wallet per trade
 HISTORY_SIZE = 50        
 
 # --- 📉 FALL LOGIC: THE SNIPER LADDER ---
-# The bot looks for these specific percentage drops
 DIP_THRESHOLDS = [0.005, 0.017, 0.02, 0.04, 0.06]
 
 # --- 🚀 RIDE LOGIC: MOMENTUM TRIGGER ---
@@ -41,7 +40,7 @@ app = FastAPI()
 
 @app.api_route("/", methods=["GET", "HEAD"])
 def health_check():
-    return {"status": "active", "system": "Nexus-7 Kinetic Engine", "version": "3.5-GREEN_TICK"}
+    return {"status": "active", "system": "Nexus-7 Smart Sniper", "version": "3.6-SMART_LADDER"}
 
 app.add_middleware(
     CORSMiddleware,
@@ -122,7 +121,7 @@ def download_logs():
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print(f"⚡ NEXUS-7 ONLINE: GREEN TICK VERIFICATION ACTIVE")
+    print(f"⚡ NEXUS-7 ONLINE: SMART LADDER & GREEN TICK ACTIVE")
     
     scan_index = 0
     
@@ -177,22 +176,45 @@ async def websocket_endpoint(websocket: WebSocket):
                 should_sell = False
                 sell_reason = ""
 
-                # STOP LOSS (-2%)
+                # --- 🧠 SMART LADDER LOGIC (Dynamic Exits) ---
+                # Check trend strength (Average of last 5 ticks vs Current Price)
+                trend_is_weak = False
+                if len(history_list) >= 5:
+                    recent_avg = sum(history_list[-5:]) / 5
+                    if current_price < recent_avg:
+                        trend_is_weak = True # Momentum is dying
+
+                # STOP LOSS (-2%) - Hard Safety
                 if pct_change <= -0.02: 
                     should_sell = True
                     sell_reason = "Loss Cut (-2%)"
                     log_type = "SELL_LOSS"
 
-                # PROFIT LADDER
+                # LEVEL 3: JACKPOT (+6%) - Always Sell
                 elif pct_change >= 0.06:
                     should_sell = True
                     sell_reason = "Jackpot (+6%)"
                     log_type = "SELL_PROFIT"
-                elif pct_change >= 0.04:
-                    log_msg = f"🚀 {target_pair} at +4%... Holding for 6%"
-                elif pct_change >= 0.02:
-                    log_msg = f"🟢 {target_pair} at +2%... Holding for 4%"
 
+                # LEVEL 2: SECURE (+4%) - Sell ONLY if trend is weak
+                elif pct_change >= 0.04:
+                    if trend_is_weak:
+                        should_sell = True
+                        sell_reason = "Secure +4% (Trend Fading)"
+                        log_type = "SELL_PROFIT"
+                    else:
+                        log_msg = f"🚀 {target_pair} at +4%... Strong Trend! Holding for 6%"
+
+                # LEVEL 1: SCALP (+2%) - Sell ONLY if trend is weak
+                elif pct_change >= 0.02:
+                    if trend_is_weak:
+                        should_sell = True
+                        sell_reason = "Secure +2% (Trend Fading)"
+                        log_type = "SELL_PROFIT"
+                    else:
+                        log_msg = f"🟢 {target_pair} at +2%... Strong Trend! Holding for 4%"
+
+                # EXECUTE SELL
                 if should_sell:
                     SIMULATED_WALLET["available"] += (position_size + pnl_dollar)
                     SIMULATED_WALLET["in_positions"] -= position_size
@@ -229,7 +251,6 @@ async def websocket_endpoint(websocket: WebSocket):
                         log_msg = f"⚠️ RIDE Skipped: RSI Overheated ({rsi_val:.1f})"
 
                 # 📉 2. THE "FALL" (Sniper Ladder + GREEN TICK)
-                # Only check fallback if Momentum didn't trigger
                 if not buy_signal:
                     for threshold in DIP_THRESHOLDS:
                         upper_limit = threshold + 0.003 
@@ -237,23 +258,20 @@ async def websocket_endpoint(websocket: WebSocket):
                         if threshold <= pullback_pct < upper_limit:
                             
                             # --- 🧠 SMART CHECK: THE GREEN TICK ---
-                            # If checking the risky 0.5% level, ensure price is CURLLING UP
                             if threshold == 0.005:
                                 last_price_check = history_list[-2] if len(history_list) > 1 else current_price
                                 
                                 if current_price <= last_price_check:
-                                    # Price is still falling! Skip this cycle.
                                     log_msg = f"📉 {target_pair} at 0.5% dip, waiting for CURL..."
                                     break 
                                 else:
-                                    # Price ticked UP! Confirm buy.
                                     buy_signal = True
                                     buy_reason = f"✅ CURL: Sniped {threshold*100}% Dip on Bounce"
                                     buy_type = "DIP_BUY"
                                     break
                             
                             else:
-                                # For deeper dips (1.7%+), just buy (Panic Oversold)
+                                # For deeper dips (1.7%+), just buy
                                 buy_signal = True
                                 buy_reason = f"📉 FALL: Sniped {threshold*100}% Dip"
                                 buy_type = "DIP_BUY"
@@ -304,7 +322,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 "price": current_price,
                 "type": log_type,
                 "message": log_msg,
-                "veto_status": veto_status,  # Sent to Frontend
+                "veto_status": veto_status, 
                 "wallet": wallet_payload 
             }
             await websocket.send_text(json.dumps(data))
