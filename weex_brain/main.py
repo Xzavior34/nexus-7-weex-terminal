@@ -231,9 +231,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     buy_signal = False
                     buy_note = ""
 
-                    # 🔥 STRATEGY 1: ACTIVE TREND SNIPER (Fixes DOGE issue)
-                    # If trend is already healthy, buy on tiny momentum
-                    if 55 < rsi < 85 and momentum > 1.001:
+                    # 🔥 STRATEGY 1: ACTIVE TREND SNIPER (TUNED)
+                    # OLD: 1.001 (Too noisy, buys everything)
+                    # NEW: 1.004 (Requires 0.4% move - Filters out the weak "Red" trades)
+                    if 55 < rsi < 85 and momentum > 1.004:
                         buy_signal = True; buy_note = "TREND FOLLOW"
 
                     # 🚀 STRATEGY 2: MOMENTUM EXPLOSION
