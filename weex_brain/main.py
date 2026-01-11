@@ -11,11 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from weex_client import weex_bot  # Assuming this handles your API calls
 
-# --- ⚙️ CONFIGURATION & RISK MANAGEMENT ---
+# --- ⚙️ CONFIGURATION & COMPETITION MODE ---
 LIVE_TRADING = False          # ⚠️ SET TO TRUE TO TRADE REAL MONEY
-LEVERAGE = 10
+LEVERAGE = 10                 # High-Performance Leverage
 BET_PERCENTAGE = 0.15         # 15% of Wallet per trade
-HISTORY_SIZE = 50             # Ticks (approx 25-50 seconds of data)
+HISTORY_SIZE = 300            # UPDATED: 2.5 minutes of memory (Better Trend Logic)
 LOOP_DELAY = 0.5              # Fast loop (0.5s)
 
 # ✅ APPROVED "HIGH BETA" MAJORS
@@ -25,10 +25,10 @@ ALLOWED_PAIRS = [
     "AVAXUSDT", "LINKUSDT", "DOTUSDT", "LTCUSDT"
 ]
 
-# --- 📉 STRATEGY LOGIC ---
+# --- 📉 PROFIT TUNING (AGGRESSIVE BUT SMART) ---
 DIP_THRESHOLDS = [0.005, 0.017, 0.02, 0.04, 0.06]
-MOMENTUM_THRESHOLD = 1.015
-RSI_OVERBOUGHT = 75
+MOMENTUM_THRESHOLD = 1.003    # UPDATED: Buy on 0.3% moves (More Trades = More Profit)
+RSI_OVERBOUGHT = 85           # UPDATED: Allow pumps to run higher before filtering
 
 LOG_FILE = "nexus7_logs.csv"
 WALLET_FILE = "wallet_data.json"
@@ -188,15 +188,14 @@ async def websocket_endpoint(websocket: WebSocket):
                     pnl_dollar = entry["size"] * pct * LEVERAGE
                     active_positions[pair]["unrealized_pnl"] = pnl_dollar 
                     
-                    # Exit Logic
+                    # Exit Logic (UPDATED FOR FAST PROFIT TAKING)
                     should_sell = False
                     sell_reason = ""
                     trend_weak = len(history) >= 5 and current_price < (sum(history[-5:])/5)
 
                     if pct <= -0.02: should_sell = True; sell_reason = "Loss Cut (-2%)"
-                    elif pct >= 0.06: should_sell = True; sell_reason = "Jackpot (+6%)"
-                    elif pct >= 0.04 and trend_weak: should_sell = True; sell_reason = "Secure +4%"
-                    elif pct >= 0.02 and trend_weak: should_sell = True; sell_reason = "Scalp +2%"
+                    elif pct >= 0.035: should_sell = True; sell_reason = "Jackpot (+3.5%)" # Faster Take Profit
+                    elif pct >= 0.02 and trend_weak: should_sell = True; sell_reason = "Secure +2%"
 
                     if should_sell:
                         await execute_trade("SELL", pair, entry["size"], current_price, sell_reason)
@@ -216,7 +215,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     buy_signal = False
                     buy_note = ""
 
-                    # Strategy 1: RIDE
+                    # Strategy 1: RIDE (UPDATED THRESHOLDS)
                     if momentum > MOMENTUM_THRESHOLD and rsi < RSI_OVERBOUGHT:
                         buy_signal = True; buy_note = "MOMENTUM RIDE"
 
@@ -242,8 +241,8 @@ async def websocket_endpoint(websocket: WebSocket):
                                 msg_type = "BUY"
                                 msg_text = f"⚡ BOUGHT {pair}: {buy_note}"
 
-                # 4. 📡 SEND PAYLOAD (THE FIX)
-                # We rebuild the exact JSON structure your Frontend expects
+                # 4. 📡 SEND PAYLOAD (THE FRONTEND FIX)
+                # Rebuilds the exact JSON structure your Frontend expects
                 total_unrealized = sum(p.get("unrealized_pnl", 0) for p in active_positions.values())
                 SIMULATED_WALLET["total"] = SIMULATED_WALLET["available"] + SIMULATED_WALLET["in_positions"] + total_unrealized
                 
