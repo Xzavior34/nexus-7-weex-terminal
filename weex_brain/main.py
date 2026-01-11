@@ -100,7 +100,7 @@ def save_nexus_log(symbol, action, type_tag, price, reason):
 # Initialize Wallet
 SIMULATED_WALLET = load_wallet()
 
-# --- 🚀 ASYNC CORE (SPEED FIX: STAGGERED REQUESTS) ---
+# --- 🚀 ASYNC CORE (SPEED FIX: TRUE STAGGERED EXECUTION) ---
 
 async def fetch_price_safe(pair):
     """Fetches single price with error handling."""
@@ -111,15 +111,19 @@ async def fetch_price_safe(pair):
 
 async def fetch_all_prices():
     """
-    Fetches prices with a tiny stagger to avoid API Rate Limits.
-    This fixes the 11-second delay issue.
+    Fetches prices by scheduling tasks 0.05s apart.
+    This creates a smooth stream of requests instead of a 'batch slam',
+    preventing the 11-second API block.
     """
     tasks = []
     for pair in ALLOWED_PAIRS:
-        tasks.append(fetch_price_safe(pair))
-        # ⚡ MAGIC FIX: 0.05s stagger prevents "Spam Block" from Exchange
+        # Schedule the task immediately
+        task = asyncio.create_task(fetch_price_safe(pair))
+        tasks.append(task)
+        # Wait a tiny bit before scheduling the next one
         await asyncio.sleep(0.05) 
     
+    # Wait for all scheduled tasks to complete
     results = await asyncio.gather(*tasks, return_exceptions=True)
     
     price_map = {}
