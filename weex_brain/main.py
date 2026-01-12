@@ -9,10 +9,10 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from weex_client import weex_bot
 
-# --- ⚙️ CONFIGURATION & RISK (RECOVERY MODE) ---
+# --- ⚙️ CONFIGURATION (SMART SNIPER) ---
 LIVE_TRADING = False
 LEVERAGE = 10
-BET_PERCENTAGE = 0.15        # Back to 15% to recover losses with fewer, better trades
+BET_PERCENTAGE = 0.15        # Keep high (15%) to gain significantly on winning trades
 HISTORY_SIZE = 300
 LOOP_DELAY = 0.5
 
@@ -22,12 +22,13 @@ ALLOWED_PAIRS = [
     "AVAXUSDT", "LINKUSDT", "DOTUSDT", "LTCUSDT"
 ]
 
-# --- 📉 SNIPER STRATEGY (RESTORED) ---
-MOMENTUM_THRESHOLD = 1.004   # RESTORED: Only buy strong 0.4% pumps. No more weak signals.
-STOP_LOSS_PCT = 0.02         # Standard 2% Stop Loss to breathe
-TRAILING_DISTANCE = 0.01     # Standard 1% Trail (Let winners run)
-BREAK_EVEN_TRIGGER = 0.012   # Secure trade at +1.2%
-PARTIAL_TAKE_PROFIT = 0.025  # Target larger wins (+2.5%) to offset today's losses
+# --- 📉 STRATEGY SETTINGS ---
+MOMENTUM_THRESHOLD = 1.004   # Only buy strong 0.4% pumps
+STOP_LOSS_PCT = 0.02         # 2% Risk per trade
+TRAILING_DISTANCE = 0.01     # 1% standard trail
+BREAK_EVEN_TRIGGER = 0.008   # NEW: At +0.8% profit, risk becomes $0
+PROFIT_LOCK_TRIGGER = 0.020  # NEW: At +2.0% profit, lock in minimum +1.0% gain
+PARTIAL_TAKE_PROFIT = 0.035  # Aim for the moon (+3.5%)
 
 WALLET_FILE = "wallet_data.json"
 
@@ -67,7 +68,7 @@ async def fetch_all_prices():
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("⚡ NEXUS-7: SNIPER RECOVERY MODE ACTIVE")
+    print("⚡ NEXUS-7: SMART SNIPER ACTIVE")
     
     async def keep_alive():
         try:
@@ -85,13 +86,13 @@ async def websocket_endpoint(websocket: WebSocket):
             if not prices:
                 await asyncio.sleep(0.1); continue
 
-            # 🛡️ STRICT VETO (RESTORED)
+            # 🛡️ ATOMIC VETO (STRICT)
             veto_active = "GREEN"
             if "BTCUSDT" in prices:
                 price_history["BTCUSDT"].append(prices["BTCUSDT"])
                 if len(price_history["BTCUSDT"]) >= 5:
                     recent = list(price_history["BTCUSDT"])
-                    # RESTORED: If BTC drops 0.3%, STOP TRADING. Safety first.
+                    # If BTC drops 0.3%, STOP. This prevents "bad market" losses.
                     if recent[-1] < recent[0] * 0.997: veto_active = "RED"
 
             for pair, current_price in prices.items():
@@ -106,14 +107,27 @@ async def websocket_endpoint(websocket: WebSocket):
                     if current_price > pos.get("high_price", 0):
                         active_positions[pair]["high_price"] = current_price
                     
+                    # SMART EXIT LOGIC
                     trail_stop = pos.get("high_price", 0) * (1 - TRAILING_DISTANCE)
                     should_sell, reason = False, ""
                     
+                    # 1. STOP LOSS
                     if current_price <= pos["stop_loss"]: should_sell, reason = True, "Stop Loss"
-                    elif pct >= PARTIAL_TAKE_PROFIT: should_sell, reason = True, "Sniper Target Hit"
+                    
+                    # 2. TAKE PROFIT (Big Gain)
+                    elif pct >= PARTIAL_TAKE_PROFIT: should_sell, reason = True, "Jackpot Target Hit"
+                    
+                    # 3. SMART BREAK-EVEN (Safety)
                     elif pct >= BREAK_EVEN_TRIGGER and pos["stop_loss"] < pos["price"]:
                         active_positions[pair]["stop_loss"] = pos["price"]
-                        msg_text = f"🛡️ BREAK-EVEN SET for {pair}"
+                        msg_text = f"🛡️ BREAK-EVEN SET (Risk Free)"
+                    
+                    # 4. HARD PROFIT LOCK (Gain Significance)
+                    elif pct >= PROFIT_LOCK_TRIGGER and pos["stop_loss"] < pos["price"] * 1.01:
+                        active_positions[pair]["stop_loss"] = pos["price"] * 1.01
+                        msg_text = f"🔒 PROFIT LOCKED at +1%"
+
+                    # 5. TRAILING STOP
                     elif current_price <= trail_stop and pct >= 0.01:
                         should_sell, reason = True, "Trailing Stop Hit"
 
@@ -125,11 +139,12 @@ async def websocket_endpoint(websocket: WebSocket):
                         msg_type, msg_text = "SELL", f"💰 SOLD {pair}: {reason}"
                     else:
                         active_positions[pair]["unrealized_pnl"] = pos["size"] * pct * LEVERAGE
-                        msg_type, msg_text = "HOLD", f"Holding {pair} ({pct*100:.2f}%)"
+                        if msg_text.startswith("Scanning"): # Don't overwrite special messages
+                             msg_text = f"HOLD: {pair} ({pct*100:.2f}%)"
+                        msg_type = "HOLD"
 
                 elif len(history) >= 20 and veto_active == "GREEN":
                     momentum = (sum(history[-3:])/3) / (sum(history[-20:])/20)
-                    # RESTORED: High threshold (1.004) to avoid "fake" pumps
                     if momentum > MOMENTUM_THRESHOLD:
                         bet = SIMULATED_WALLET["available"] * BET_PERCENTAGE
                         if bet >= 10:
