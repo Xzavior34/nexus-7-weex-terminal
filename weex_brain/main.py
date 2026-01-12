@@ -9,10 +9,10 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from weex_client import weex_bot
 
-# --- ⚙️ CONFIGURATION (HYPER-ACTIVE MODE) ---
+# --- ⚙️ CONFIGURATION & RISK (RECOVERY MODE) ---
 LIVE_TRADING = False
 LEVERAGE = 10
-BET_PERCENTAGE = 0.10        # Lowered to 10% because we will trade A LOT
+BET_PERCENTAGE = 0.15        # Back to 15% to recover losses with fewer, better trades
 HISTORY_SIZE = 300
 LOOP_DELAY = 0.5
 
@@ -22,12 +22,12 @@ ALLOWED_PAIRS = [
     "AVAXUSDT", "LINKUSDT", "DOTUSDT", "LTCUSDT"
 ]
 
-# --- 📉 GRINDER STRATEGY (FOR FLAT MARKETS) ---
-MOMENTUM_THRESHOLD = 1.001   # UPDATED: Trigger on just 0.1% jumps (Very Aggressive)
-STOP_LOSS_PCT = 0.015        # Tight 1.5% Stop Loss
-TRAILING_DISTANCE = 0.003    # Super-tight 0.3% trail to lock in tiny wins
-BREAK_EVEN_TRIGGER = 0.005   # Move to Break-Even at just +0.5% profit
-PARTIAL_TAKE_PROFIT = 0.012  # Cash out start at +1.2%
+# --- 📉 SNIPER STRATEGY (RESTORED) ---
+MOMENTUM_THRESHOLD = 1.004   # RESTORED: Only buy strong 0.4% pumps. No more weak signals.
+STOP_LOSS_PCT = 0.02         # Standard 2% Stop Loss to breathe
+TRAILING_DISTANCE = 0.01     # Standard 1% Trail (Let winners run)
+BREAK_EVEN_TRIGGER = 0.012   # Secure trade at +1.2%
+PARTIAL_TAKE_PROFIT = 0.025  # Target larger wins (+2.5%) to offset today's losses
 
 WALLET_FILE = "wallet_data.json"
 
@@ -67,7 +67,7 @@ async def fetch_all_prices():
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("⚡ NEXUS-7: HYPER-GRINDER MODE ACTIVE")
+    print("⚡ NEXUS-7: SNIPER RECOVERY MODE ACTIVE")
     
     async def keep_alive():
         try:
@@ -85,14 +85,14 @@ async def websocket_endpoint(websocket: WebSocket):
             if not prices:
                 await asyncio.sleep(0.1); continue
 
-            # 🛡️ RELAXED VETO
+            # 🛡️ STRICT VETO (RESTORED)
             veto_active = "GREEN"
             if "BTCUSDT" in prices:
                 price_history["BTCUSDT"].append(prices["BTCUSDT"])
                 if len(price_history["BTCUSDT"]) >= 5:
                     recent = list(price_history["BTCUSDT"])
-                    # Only pause if BTC crashes HARD (0.8% drop)
-                    if recent[-1] < recent[0] * 0.992: veto_active = "RED"
+                    # RESTORED: If BTC drops 0.3%, STOP TRADING. Safety first.
+                    if recent[-1] < recent[0] * 0.997: veto_active = "RED"
 
             for pair, current_price in prices.items():
                 price_history[pair].append(current_price)
@@ -106,31 +106,30 @@ async def websocket_endpoint(websocket: WebSocket):
                     if current_price > pos.get("high_price", 0):
                         active_positions[pair]["high_price"] = current_price
                     
-                    # TIGHT TRAILING
                     trail_stop = pos.get("high_price", 0) * (1 - TRAILING_DISTANCE)
                     should_sell, reason = False, ""
                     
                     if current_price <= pos["stop_loss"]: should_sell, reason = True, "Stop Loss"
-                    elif pct >= PARTIAL_TAKE_PROFIT: should_sell, reason = True, "Scalp Target Hit"
+                    elif pct >= PARTIAL_TAKE_PROFIT: should_sell, reason = True, "Sniper Target Hit"
                     elif pct >= BREAK_EVEN_TRIGGER and pos["stop_loss"] < pos["price"]:
                         active_positions[pair]["stop_loss"] = pos["price"]
                         msg_text = f"🛡️ BREAK-EVEN SET for {pair}"
-                    elif current_price <= trail_stop and pct >= 0.003: # Secure profit at +0.3%
-                        should_sell, reason = True, "Micro-Profit Locked"
+                    elif current_price <= trail_stop and pct >= 0.01:
+                        should_sell, reason = True, "Trailing Stop Hit"
 
                     if should_sell:
                         pnl = pos["size"] * pct * LEVERAGE
                         SIMULATED_WALLET["available"] += (pos["size"] + pnl)
                         SIMULATED_WALLET["in_positions"] -= pos["size"]
                         del active_positions[pair]
-                        msg_type, msg_text = "SELL", f"💰 CASHED OUT {pair}: {reason}"
+                        msg_type, msg_text = "SELL", f"💰 SOLD {pair}: {reason}"
                     else:
                         active_positions[pair]["unrealized_pnl"] = pos["size"] * pct * LEVERAGE
                         msg_type, msg_text = "HOLD", f"Holding {pair} ({pct*100:.2f}%)"
 
                 elif len(history) >= 20 and veto_active == "GREEN":
                     momentum = (sum(history[-3:])/3) / (sum(history[-20:])/20)
-                    # HYPER SENSITIVE ENTRY
+                    # RESTORED: High threshold (1.004) to avoid "fake" pumps
                     if momentum > MOMENTUM_THRESHOLD:
                         bet = SIMULATED_WALLET["available"] * BET_PERCENTAGE
                         if bet >= 10:
@@ -141,7 +140,7 @@ async def websocket_endpoint(websocket: WebSocket):
                                 "stop_loss": current_price * (1 - STOP_LOSS_PCT),
                                 "high_price": current_price, "type": "TREND"
                             }
-                            msg_type, msg_text = "BUY", f"⚡ GRIND ENTRY {pair}"
+                            msg_type, msg_text = "BUY", f"⚡ SNIPER ENTRY {pair}"
 
                 # 📡 BROADCAST
                 total_unrealized = sum(p.get("unrealized_pnl", 0) for p in active_positions.values())
