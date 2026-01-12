@@ -9,10 +9,10 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from weex_client import weex_bot
 
-# --- ⚙️ CONFIGURATION & RISK ---
+# --- ⚙️ CONFIGURATION & RISK (TUNED FOR 2-WEEK SPRINT) ---
 LIVE_TRADING = False
 LEVERAGE = 10
-BET_PERCENTAGE = 0.15
+BET_PERCENTAGE = 0.12        # UPDATED: 12% is safer than 15% for a 2-week run
 HISTORY_SIZE = 300
 LOOP_DELAY = 0.5
 
@@ -23,7 +23,7 @@ ALLOWED_PAIRS = [
 ]
 
 # --- 📉 AGGRESSIVE SCALPING SETTINGS ---
-MOMENTUM_THRESHOLD = 1.004   
+MOMENTUM_THRESHOLD = 1.003   # UPDATED: Lowered to 1.003 to catch more trades
 STOP_LOSS_PCT = 0.02         
 TRAILING_DISTANCE = 0.005    # Banks profit if price drops only 0.5% from peak
 BREAK_EVEN_TRIGGER = 0.008   # Risk-free trade at +0.8% profit
@@ -67,7 +67,7 @@ async def fetch_all_prices():
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("⚡ NEXUS-7: AGGRESSIVE SCALPER ACTIVE")
+    print("⚡ NEXUS-7: 2-WEEK SPRINT MODE ACTIVE")
     
     async def keep_alive():
         try:
@@ -85,13 +85,15 @@ async def websocket_endpoint(websocket: WebSocket):
             if not prices:
                 await asyncio.sleep(0.1); continue
 
-            # 🛡️ ATOMIC VETO
+            # 🛡️ ATOMIC VETO (TUNED)
             veto_active = "GREEN"
             if "BTCUSDT" in prices:
                 price_history["BTCUSDT"].append(prices["BTCUSDT"])
                 if len(price_history["BTCUSDT"]) >= 5:
                     recent = list(price_history["BTCUSDT"])
-                    if recent[-1] < recent[0] * 0.997: veto_active = "RED"
+                    # UPDATED: Changed from 0.997 (0.3%) to 0.995 (0.5%)
+                    # This stops the "Red Light" from triggering on tiny dips
+                    if recent[-1] < recent[0] * 0.995: veto_active = "RED"
 
             for pair, current_price in prices.items():
                 price_history[pair].append(current_price)
@@ -108,7 +110,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     trail_stop = pos.get("high_price", 0) * (1 - TRAILING_DISTANCE)
                     should_sell, reason = False, ""
                     
-                    # NEW SCALPER LOGIC: Fast Exit
+                    # SCALPER LOGIC: Fast Exit
                     if current_price <= pos["stop_loss"]: should_sell, reason = True, "Stop Loss"
                     elif pct >= PARTIAL_TAKE_PROFIT: should_sell, reason = True, "Scalp Target Hit"
                     elif pct >= BREAK_EVEN_TRIGGER and pos["stop_loss"] < pos["price"]:
