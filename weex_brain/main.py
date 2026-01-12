@@ -22,12 +22,12 @@ ALLOWED_PAIRS = [
     "AVAXUSDT", "LINKUSDT", "DOTUSDT", "LTCUSDT"
 ]
 
-# --- 📉 STRATEGY TUNING ---
-MOMENTUM_THRESHOLD = 1.004  
+# --- 📉 AGGRESSIVE SCALPING SETTINGS ---
+MOMENTUM_THRESHOLD = 1.004   
 STOP_LOSS_PCT = 0.02         
-TRAILING_DISTANCE = 0.01     
-BREAK_EVEN_TRIGGER = 0.015   
-PARTIAL_TAKE_PROFIT = 0.025  
+TRAILING_DISTANCE = 0.005    # Banks profit if price drops only 0.5% from peak
+BREAK_EVEN_TRIGGER = 0.008   # Risk-free trade at +0.8% profit
+PARTIAL_TAKE_PROFIT = 0.015  # Instant cash-out at +1.5%
 
 WALLET_FILE = "wallet_data.json"
 
@@ -67,17 +67,14 @@ async def fetch_all_prices():
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("⚡ NEXUS-7 PRO v2.1: RISK GUARD ACTIVE")
+    print("⚡ NEXUS-7: AGGRESSIVE SCALPER ACTIVE")
     
-    # --- 💓 HEARTBEAT TASK ---
-    # Keeps Render from timing out during quiet markets
     async def keep_alive():
         try:
             while True:
                 await websocket.send_json({"type": "ping", "message": "HEARTBEAT"})
-                await asyncio.sleep(20) 
-        except:
-            pass
+                await asyncio.sleep(20) # Prevents Render timeout
+        except: pass
 
     heartbeat_task = asyncio.create_task(keep_alive())
     
@@ -85,11 +82,10 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             loop_start = time.time()
             prices = await fetch_all_prices()
-            
             if not prices:
                 await asyncio.sleep(0.1); continue
 
-            # 🛡️ ATOMIC VETO CHECK
+            # 🛡️ ATOMIC VETO
             veto_active = "GREEN"
             if "BTCUSDT" in prices:
                 price_history["BTCUSDT"].append(prices["BTCUSDT"])
@@ -102,7 +98,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 history = list(price_history[pair])
                 msg_type, msg_text = "SCAN", f"Scanning {pair}..."
                 
-                # --- POSITION MANAGEMENT (TRAIL & BREAK-EVEN) ---
                 if pair in active_positions:
                     pos = active_positions[pair]
                     pct = (current_price - pos["price"]) / pos["price"]
@@ -113,25 +108,25 @@ async def websocket_endpoint(websocket: WebSocket):
                     trail_stop = pos.get("high_price", 0) * (1 - TRAILING_DISTANCE)
                     should_sell, reason = False, ""
                     
+                    # NEW SCALPER LOGIC: Fast Exit
                     if current_price <= pos["stop_loss"]: should_sell, reason = True, "Stop Loss"
-                    elif pct >= 0.035: should_sell, reason = True, "Max Take Profit"
+                    elif pct >= PARTIAL_TAKE_PROFIT: should_sell, reason = True, "Scalp Target Hit"
                     elif pct >= BREAK_EVEN_TRIGGER and pos["stop_loss"] < pos["price"]:
                         active_positions[pair]["stop_loss"] = pos["price"]
                         msg_text = f"🛡️ BREAK-EVEN SET for {pair}"
-                    elif current_price <= trail_stop and pct >= 0.01:
-                        should_sell, reason = True, "Trailing Stop Hit"
+                    elif current_price <= trail_stop and pct >= 0.005:
+                        should_sell, reason = True, "Trailing Profit Locked"
 
                     if should_sell:
                         pnl = pos["size"] * pct * LEVERAGE
                         SIMULATED_WALLET["available"] += (pos["size"] + pnl)
                         SIMULATED_WALLET["in_positions"] -= pos["size"]
                         del active_positions[pair]
-                        msg_type, msg_text = "SELL", f"💰 SOLD {pair}: {reason}"
+                        msg_type, msg_text = "SELL", f"💰 CASHED OUT {pair}: {reason}"
                     else:
                         active_positions[pair]["unrealized_pnl"] = pos["size"] * pct * LEVERAGE
                         msg_type, msg_text = "HOLD", f"Holding {pair} ({pct*100:.2f}%)"
 
-                # --- SIGNAL DETECTION ---
                 elif len(history) >= 20 and veto_active == "GREEN":
                     momentum = (sum(history[-3:])/3) / (sum(history[-20:])/20)
                     if momentum > MOMENTUM_THRESHOLD:
@@ -140,15 +135,13 @@ async def websocket_endpoint(websocket: WebSocket):
                             SIMULATED_WALLET["available"] -= bet
                             SIMULATED_WALLET["in_positions"] += bet
                             active_positions[pair] = {
-                                "price": current_price, 
-                                "size": bet, 
+                                "price": current_price, "size": bet, 
                                 "stop_loss": current_price * (1 - STOP_LOSS_PCT),
-                                "high_price": current_price,
-                                "type": "TREND"
+                                "high_price": current_price, "type": "TREND"
                             }
-                            msg_type, msg_text = "BUY", f"⚡ BOUGHT {pair}: MOMENTUM"
+                            msg_type, msg_text = "BUY", f"⚡ SNIPED {pair}"
 
-                # 📡 BROADCAST PAYLOAD
+                # 📡 DATA BROADCAST
                 total_unrealized = sum(p.get("unrealized_pnl", 0) for p in active_positions.values())
                 SIMULATED_WALLET["total"] = SIMULATED_WALLET["available"] + SIMULATED_WALLET["in_positions"] + total_unrealized
                 
@@ -173,7 +166,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect: 
         print("❌ LINK SEVERED")
     finally:
-        heartbeat_task.cancel() # Shut down heartbeat when link is dead
+        heartbeat_task.cancel()
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
