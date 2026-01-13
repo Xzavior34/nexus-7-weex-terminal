@@ -63,7 +63,7 @@ graph LR
     B -->|Secure WebSocket Stream| C(Dashboard / Vercel)
     B -->|Audit Trail| D[ai_log.csv]
     E[Risk Manager] -->|Block/Allow| B
-
+```
 🚀 Local Installation
 If you want to audit the logic locally:
  * Clone the Repo
