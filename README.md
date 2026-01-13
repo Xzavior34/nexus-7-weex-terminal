@@ -15,8 +15,7 @@
 ## 🔗 Live Demo
 - **Live Terminal:** [https://nexus-7-weex-terminal.vercel.app](https://nexus-7-weex-terminal.vercel.app)
 - **Demo Video:** [Watch
-on YouTubel(https://lyoutu.be
-/uBmzo1Jéhpe)
+on YouTubel(https://lyoutu.be/uBmzo1J6hp8)
 
 ---
 
