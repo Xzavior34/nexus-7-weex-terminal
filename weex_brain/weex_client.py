@@ -1,3 +1,4 @@
+import os
 import time
 import hmac
 import hashlib
@@ -6,11 +7,12 @@ import requests
 import json
 import random
 
-# --- WEEX CONFIG ---
+# --- WEEX CONFIG (SECURE) ---
+# Now pulls from Render Environment Variables. Safe to commit to GitHub.
 WEEX_CONFIG = {
-    "API_KEY": "weex_d6eac84d6220ac893cd2fb10aadcf493",
-    "SECRET_KEY": "dd6dda820151a46c6ac9dc1e0baf1d846ba9d1c8deee0d93aa3e71d516515c3b",
-    "PASSPHRASE": "weex0717289",
+    "API_KEY": os.environ.get("WEEX_API_KEY", ""),
+    "SECRET_KEY": os.environ.get("WEEX_API_SECRET", ""),
+    "PASSPHRASE": os.environ.get("WEEX_API_PASSPHRASE", ""),
     "BASE_URL": "https://api-contract.weex.com"
 }
 
@@ -28,69 +30,31 @@ class WeexClient:
 
     # --- THE TANK: MULTI-SOURCE PRICE FETCHER ---
     def get_market_price(self, symbol):
-        """
-        Tries 5 different sources. If one fails, it tries the next.
-        """
-        clean_sym = symbol.replace("_UMCBL", "").upper() # e.g., "BTCUSDT"
-        base_coin = clean_sym.replace("USDT", "")        # e.g., "BTC"
+        clean_sym = symbol.replace("_UMCBL", "").upper()
+        base_coin = clean_sym.replace("USDT", "")
         
-        # SOURCE 1: BINANCE (Fastest)
+        # SOURCE 1: BINANCE
         try:
             url = f"https://api.binance.com/api/v3/ticker/price?symbol={clean_sym}"
             res = requests.get(url, headers=self.headers, timeout=2)
-            if res.status_code == 200:
-                return float(res.json()["price"])
-        except:
-            pass
+            if res.status_code == 200: return float(res.json()["price"])
+        except: pass
 
-        # SOURCE 2: COINBASE (Very Reliable, US-based)
+        # SOURCE 2: COINBASE
         try:
             url = f"https://api.coinbase.com/v2/prices/{base_coin}-USD/spot"
             res = requests.get(url, headers=self.headers, timeout=2)
-            if res.status_code == 200:
-                return float(res.json()["data"]["amount"])
-        except:
-            pass
+            if res.status_code == 200: return float(res.json()["data"]["amount"])
+        except: pass
 
-        # SOURCE 3: KRAKEN (Alternative)
-        try:
-            # Kraken uses XBT instead of BTC sometimes, but let's try standard pairs
-            pair = f"{base_coin}USD"
-            if base_coin == "BTC": pair = "XXBTZUSD"
-            elif base_coin == "ETH": pair = "XETHZUSD"
-            
-            url = f"https://api.kraken.com/0/public/Ticker?pair={pair}"
-            res = requests.get(url, headers=self.headers, timeout=2)
-            if res.status_code == 200:
-                data = res.json()
-                if "result" in data:
-                    first_key = list(data["result"].keys())[0]
-                    return float(data["result"][first_key]["c"][0])
-        except:
-            pass
-            
-        # SOURCE 4: OKX (Asian Markets)
+        # SOURCE 3: OKX
         try:
             url = f"https://www.okx.com/api/v5/market/ticker?instId={base_coin}-USDT"
             res = requests.get(url, headers=self.headers, timeout=2)
-            if res.status_code == 200:
-                return float(res.json()["data"][0]["last"])
-        except:
-            pass
+            if res.status_code == 200: return float(res.json()["data"][0]["last"])
+        except: pass
 
-        # SOURCE 5: COINGECKO (Last Resort - Slower)
-        try:
-            cg_map = {"BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana", "DOGE": "dogecoin"}
-            cg_id = cg_map.get(base_coin)
-            if cg_id:
-                url = f"https://api.coingecko.com/api/v3/simple/price?ids={cg_id}&vs_currencies=usd"
-                res = requests.get(url, headers=self.headers, timeout=3)
-                if res.status_code == 200:
-                    return float(res.json()[cg_id]["usd"])
-        except:
-            pass
-
-        return None # All sources failed (Very unlikely)
+        return None
 
     # --- AUTHENTICATION HELPER ---
     def _get_signature(self, method, request_path, body=""):
@@ -113,7 +77,7 @@ class WeexClient:
         endpoint = "/capi/v2/order/uploadAiLog"
         url = self.base_url + endpoint
         
-        # 1. Build the Compliance Payload
+        # 1. Build Payload
         payload = {
             "orderId": None,
             "stage": "Decision Making",
@@ -131,10 +95,10 @@ class WeexClient:
         }
         body_json = json.dumps(payload)
         
-        # 2. Generate Signature using existing helper
+        # 2. Generate Signature
         timestamp, sign = self._get_signature("POST", endpoint, body_json)
 
-        # 3. Send Headers
+        # 3. Send Request
         headers = {
             "Content-Type": "application/json",
             "ACCESS-KEY": self.key,
