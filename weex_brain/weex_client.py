@@ -8,7 +8,6 @@ import json
 import random
 
 # --- WEEX CONFIG (SECURE) ---
-# Now pulls from Render Environment Variables. Safe to commit to GitHub.
 WEEX_CONFIG = {
     "API_KEY": os.environ.get("WEEX_API_KEY", ""),
     "SECRET_KEY": os.environ.get("WEEX_API_SECRET", ""),
@@ -22,8 +21,8 @@ class WeexClient:
         self.secret = WEEX_CONFIG["SECRET_KEY"]
         self.passphrase = WEEX_CONFIG["PASSPHRASE"]
         self.base_url = WEEX_CONFIG["BASE_URL"]
-        # Browser-like headers to avoid being blocked
-        self.headers = {
+        # Browser-like headers to avoid being blocked by Cloudflare (Error 521/403)
+        self.common_headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
             "Accept": "application/json"
         }
@@ -36,21 +35,21 @@ class WeexClient:
         # SOURCE 1: BINANCE
         try:
             url = f"https://api.binance.com/api/v3/ticker/price?symbol={clean_sym}"
-            res = requests.get(url, headers=self.headers, timeout=2)
+            res = requests.get(url, headers=self.common_headers, timeout=2)
             if res.status_code == 200: return float(res.json()["price"])
         except: pass
 
         # SOURCE 2: COINBASE
         try:
             url = f"https://api.coinbase.com/v2/prices/{base_coin}-USD/spot"
-            res = requests.get(url, headers=self.headers, timeout=2)
+            res = requests.get(url, headers=self.common_headers, timeout=2)
             if res.status_code == 200: return float(res.json()["data"]["amount"])
         except: pass
 
         # SOURCE 3: OKX
         try:
             url = f"https://www.okx.com/api/v5/market/ticker?instId={base_coin}-USDT"
-            res = requests.get(url, headers=self.headers, timeout=2)
+            res = requests.get(url, headers=self.common_headers, timeout=2)
             if res.status_code == 200: return float(res.json()["data"][0]["last"])
         except: pass
 
@@ -72,12 +71,11 @@ class WeexClient:
     def upload_ai_log(self, symbol, action, logic, risk_score):
         """
         Streams AI decisions to WEEX servers in real-time.
-        FIXED: Uses api.weex.com (Universal Host) instead of api-contract.
+        FIXED: Uses api-contract (Valid) + User-Agent (Anti-Block).
         """
-        # 🟢 CRITICAL FIX: Direct logs to the specific logging server
-        log_host = "https://api.weex.com"
+        # 🟢 CORRECT HOST: api-contract is the only one that hosts /capi/
+        url = "https://api-contract.weex.com/capi/v2/order/uploadAiLog"
         endpoint = "/capi/v2/order/uploadAiLog"
-        url = log_host + endpoint
         
         # 1. Build Payload
         payload = {
@@ -98,27 +96,27 @@ class WeexClient:
         body_json = json.dumps(payload)
         
         # 2. Generate Signature
-        # Note: We sign the endpoint path, which matches the URL path
         timestamp, sign = self._get_signature("POST", endpoint, body_json)
 
-        # 3. Send Request
-        headers = {
+        # 3. Send Request (WITH USER-AGENT TO PREVENT 521 BLOCK)
+        headers = self.common_headers.copy()
+        headers.update({
             "Content-Type": "application/json",
             "ACCESS-KEY": self.key,
             "ACCESS-SIGN": sign,
             "ACCESS-PASSPHRASE": self.passphrase,
             "ACCESS-TIMESTAMP": timestamp,
             "locale": "en-US"
-        }
+        })
 
         try:
-            # Increased timeout to 10s to prevent network flukes
             response = requests.post(url, data=body_json, headers=headers, timeout=10)
             if response.status_code == 200:
                 print(f"✅ AI LOG SENT: {action} on {symbol}")
                 return True
             else:
-                print(f"⚠️ LOG FAILED ({response.status_code}): {response.text}")
+                # 521/403 means they are blocking us. We print the error but keep trading.
+                print(f"⚠️ LOG FAILED ({response.status_code}): {response.text[:100]}")
                 return False
         except Exception as e:
             print(f"⚠️ LOG ERROR: {e}")
@@ -137,13 +135,15 @@ class WeexClient:
         body = json.dumps(params)
         timestamp, sign = self._get_signature("POST", endpoint, body)
         
-        headers = {
+        headers = self.common_headers.copy()
+        headers.update({
             "ACCESS-KEY": self.key,
             "ACCESS-SIGN": sign,
             "ACCESS-TIMESTAMP": timestamp,
             "ACCESS-PASSPHRASE": self.passphrase,
             "Content-Type": "application/json"
-        }
+        })
+        
         try:
             response = requests.post(self.base_url + endpoint, headers=headers, data=body, timeout=5)
             return response.json()
