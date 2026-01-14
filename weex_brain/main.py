@@ -100,6 +100,9 @@ async def websocket_endpoint(websocket: WebSocket):
     async def keep_alive():
         try:
             while True:
+                # Check connection state before pinging
+                if websocket.client_state.name != 'CONNECTED':
+                    break
                 await websocket.send_json({"type": "ping", "message": "HEARTBEAT"})
                 await asyncio.sleep(20) 
         except: pass
@@ -196,7 +199,7 @@ async def websocket_endpoint(websocket: WebSocket):
                                 asyncio.create_task(asyncio.to_thread(weex_bot.upload_ai_log, pair, "BUY", "Momentum > 0.3%", "0.5"))
                                 msg_type, msg_text = "BUY", f"⚡ ENTRY {pair}"
 
-                # 📡 BROADCAST
+                # 📡 BROADCAST (FIXED CRASH HERE)
                 total_unrealized = sum(p.get("unrealized_pnl", 0) for p in active_positions.values())
                 SIMULATED_WALLET["total"] = SIMULATED_WALLET["available"] + SIMULATED_WALLET["in_positions"] + total_unrealized
                 
@@ -212,14 +215,25 @@ async def websocket_endpoint(websocket: WebSocket):
                         "positions": [{"symbol": k, "pnl": round((v.get("unrealized_pnl",0)/v["size"])*100/LEVERAGE, 2), "type": v["type"]} for k, v in active_positions.items()]
                     }
                 }
-                await websocket.send_text(json.dumps(payload))
+                
+                # --- 🛡️ CRASH PREVENTION SHIELD ---
+                try:
+                    await websocket.send_text(json.dumps(payload))
+                except RuntimeError:
+                    # Connection closed by user, exit loop gracefully
+                    break
+                except Exception:
+                    # Any other send error, stop loop
+                    break
+                # ----------------------------------
+
                 await asyncio.sleep(0.01)
 
             elapsed = time.time() - loop_start
             await asyncio.sleep(max(0, LOOP_DELAY - elapsed))
 
     except WebSocketDisconnect: 
-        print("❌ LINK SEVERED")
+        print("❌ DASHBOARD DISCONNECTED (Clean exit)")
     finally:
         heartbeat_task.cancel()
 
