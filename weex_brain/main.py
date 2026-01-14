@@ -2,8 +2,7 @@
 PROJECT: NEXUS-7 (WEEX AI HACKATHON ENTRY)
 TEAM: WEEX Alpha Awakens Forked Entry
 STRATEGY: Heuristic Momentum Scalping with Anomaly Detection (BTC Veto)
-AI MODEL: Rule-Based State Machine (Heuristic AI)
-COMPLIANCE: Real-Time Log Streaming via API
+COMPLIANCE: Real-Time API Streaming via weex_client
 """
 
 import uvicorn
@@ -11,10 +10,6 @@ import asyncio
 import json
 import os
 import time
-import hmac
-import hashlib
-import base64
-import aiohttp
 from collections import deque
 from datetime import datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -48,12 +43,6 @@ PARTIAL_TAKE_PROFIT = 0.045
 
 FILES = {"wallet": "wallet_data.json"}
 
-# --- 🔑 API CREDENTIALS (REQUIRED FOR LOG SUBMISSION) ---
-# Ensure these are set in your Render Environment Variables
-API_KEY = os.environ.get("WEEX_API_KEY", "")
-API_SECRET = os.environ.get("WEEX_API_SECRET", "")
-API_PASSPHRASE = os.environ.get("WEEX_API_PASSPHRASE", "")
-
 # --- 🧠 STATE MEMORY ---
 price_history = {pair: deque(maxlen=HISTORY_SIZE) for pair in ALLOWED_PAIRS}
 active_positions = {}
@@ -61,65 +50,6 @@ last_known_prices = {}
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-
-# --- 📡 REAL-TIME LOG STREAMING (COMPLIANCE CORE) ---
-async def submit_log_to_weex(symbol, action, logic, risk_score):
-    """
-    Streams AI decision logic to WEEX API in real-time.
-    Endpoint: /capi/v2/order/uploadAiLog
-    """
-    url = "https://api-contract.weex.com/capi/v2/order/uploadAiLog"
-    
-    # 1. Construct the Payload
-    payload = {
-        "orderId": None, # We log decision BEFORE order ID exists
-        "stage": "Decision Making",
-        "model": "Nexus-7-Heuristic-v1",
-        "input": {
-            "symbol": symbol,
-            "strategy": "Momentum Scalp",
-            "parameters": f"Threshold: {MOMENTUM_THRESHOLD}"
-        },
-        "output": {
-            "action": action,
-            "risk_score": risk_score
-        },
-        "explanation": logic
-    }
-    body_json = json.dumps(payload)
-    
-    # 2. Generate Signature
-    timestamp = str(int(time.time() * 1000))
-    # Standard WEEX Signature: timestamp + method + requestPath + body
-    message = timestamp + "POST" + "/capi/v2/order/uploadAiLog" + body_json
-    signature = base64.b64encode(
-        hmac.new(
-            API_SECRET.encode('utf-8'), 
-            message.encode('utf-8'), 
-            hashlib.sha256
-        ).digest()
-    ).decode('utf-8')
-
-    headers = {
-        "Content-Type": "application/json",
-        "ACCESS-KEY": API_KEY,
-        "ACCESS-SIGN": signature,
-        "ACCESS-PASSPHRASE": API_PASSPHRASE,
-        "ACCESS-TIMESTAMP": timestamp,
-        "locale": "en-US"
-    }
-
-    # 3. Fire and Forget (Don't block trading)
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, data=body_json, headers=headers) as resp:
-                response_text = await resp.text()
-                if resp.status == 200:
-                    print(f"✅ AI LOG SENT: {action} on {symbol}")
-                else:
-                    print(f"⚠️ LOG FAILED ({resp.status}): {response_text}")
-    except Exception as e:
-        print(f"⚠️ LOG ERROR: {e}")
 
 # --- 💾 PERSISTENCE SYSTEM ---
 def save_wallet(wallet_data):
@@ -215,8 +145,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     elif pct >= BREAK_EVEN_TRIGGER and pos["stop_loss"] < pos["price"]:
                         active_positions[pair]["stop_loss"] = pos["price"]
                         msg_text = f"🛡️ SHIELD UP: Risk Free"
-                        # STREAM LOG
-                        asyncio.create_task(submit_log_to_weex(pair, "MODIFY_STOP", "Break-Even Triggered", "0.0"))
+                        # 📡 LOG TO WEEX
+                        asyncio.create_task(asyncio.to_thread(weex_bot.upload_ai_log, pair, "MODIFY_STOP", "Break-Even Triggered", "0.0"))
                     
                     elif pct >= PROFIT_LOCK_LEVEL_1 and pos["stop_loss"] < pos["price"] * 1.005:
                         active_positions[pair]["stop_loss"] = pos["price"] * 1.005
@@ -236,8 +166,8 @@ async def websocket_endpoint(websocket: WebSocket):
                         del active_positions[pair]
                         
                         save_wallet(SIMULATED_WALLET)
-                        # STREAM LOG
-                        asyncio.create_task(submit_log_to_weex(pair, "SELL", reason, "0.0"))
+                        # 📡 LOG TO WEEX
+                        asyncio.create_task(asyncio.to_thread(weex_bot.upload_ai_log, pair, "SELL", reason, "0.0"))
                         msg_type, msg_text = "SELL", f"💰 SOLD {pair}: {reason}"
                     else:
                         active_positions[pair]["unrealized_pnl"] = pos["size"] * pct * LEVERAGE
@@ -262,8 +192,8 @@ async def websocket_endpoint(websocket: WebSocket):
                                 }
                                 
                                 save_wallet(SIMULATED_WALLET)
-                                # STREAM LOG
-                                asyncio.create_task(submit_log_to_weex(pair, "BUY", "Momentum > 0.3%", "0.5"))
+                                # 📡 LOG TO WEEX
+                                asyncio.create_task(asyncio.to_thread(weex_bot.upload_ai_log, pair, "BUY", "Momentum > 0.3%", "0.5"))
                                 msg_type, msg_text = "BUY", f"⚡ ENTRY {pair}"
 
                 # 📡 BROADCAST
