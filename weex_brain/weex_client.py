@@ -21,10 +21,15 @@ class WeexClient:
         self.secret = WEEX_CONFIG["SECRET_KEY"]
         self.passphrase = WEEX_CONFIG["PASSPHRASE"]
         self.base_url = WEEX_CONFIG["BASE_URL"]
-        # Browser-like headers to avoid being blocked by Cloudflare (Error 521/403)
+        
+        # 🟢 STEALTH HEADERS (Tricks Cloudflare into thinking we are a Browser)
         self.common_headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-            "Accept": "application/json"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Origin": "https://www.weex.com",
+            "Referer": "https://www.weex.com/",
+            "Connection": "keep-alive"
         }
 
     # --- THE TANK: MULTI-SOURCE PRICE FETCHER ---
@@ -71,10 +76,8 @@ class WeexClient:
     def upload_ai_log(self, symbol, action, logic, risk_score):
         """
         Streams AI decisions to WEEX servers in real-time.
-        FIXED: Uses api-contract (Valid) + User-Agent (Anti-Block).
+        FIXED: Uses 'Stealth Headers' and 'Host Rotation' to bypass 521 blocks.
         """
-        # 🟢 CORRECT HOST: api-contract is the only one that hosts /capi/
-        url = "https://api-contract.weex.com/capi/v2/order/uploadAiLog"
         endpoint = "/capi/v2/order/uploadAiLog"
         
         # 1. Build Payload
@@ -98,7 +101,7 @@ class WeexClient:
         # 2. Generate Signature
         timestamp, sign = self._get_signature("POST", endpoint, body_json)
 
-        # 3. Send Request (WITH USER-AGENT TO PREVENT 521 BLOCK)
+        # 3. Headers (Stealth Mode)
         headers = self.common_headers.copy()
         headers.update({
             "Content-Type": "application/json",
@@ -109,18 +112,32 @@ class WeexClient:
             "locale": "en-US"
         })
 
-        try:
-            response = requests.post(url, data=body_json, headers=headers, timeout=10)
-            if response.status_code == 200:
-                print(f"✅ AI LOG SENT: {action} on {symbol}")
-                return True
-            else:
-                # 521/403 means they are blocking us. We print the error but keep trading.
-                print(f"⚠️ LOG FAILED ({response.status_code}): {response.text[:100]}")
-                return False
-        except Exception as e:
-            print(f"⚠️ LOG ERROR: {e}")
-            return False
+        # 4. HOST ROTATION (Try Contract -> If Fail -> Try Universal)
+        hosts_to_try = [
+            "https://api-contract.weex.com",  # Primary
+            "https://api.weex.com"            # Backup
+        ]
+
+        for host in hosts_to_try:
+            try:
+                url = host + endpoint
+                response = requests.post(url, data=body_json, headers=headers, timeout=5)
+                
+                if response.status_code == 200:
+                    print(f"✅ AI LOG SENT: {action} on {symbol}")
+                    return True # Success! Stop trying.
+                elif response.status_code == 521:
+                    continue # Blocked, try next host
+                else:
+                    # Some other error (400, 401), probably valid response from server
+                    print(f"⚠️ LOG FAILED ({response.status_code}): {response.text[:100]}")
+                    return False
+            except Exception:
+                continue # DNS/Connection error, try next host
+
+        # If we reach here, all hosts failed
+        print(f"⚠️ LOG FAILED: All hosts blocked or down.")
+        return False
 
     # --- TRADING EXECUTION ---
     def place_order(self, symbol, side, size):
