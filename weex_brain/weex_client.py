@@ -72,10 +72,12 @@ class WeexClient:
     def upload_ai_log(self, symbol, action, logic, risk_score):
         """
         Streams AI decisions to WEEX servers in real-time.
-        Endpoint: /capi/v2/order/uploadAiLog
+        FIXED: Uses api.weex.com (Universal Host) instead of api-contract.
         """
+        # 🟢 CRITICAL FIX: Direct logs to the specific logging server
+        log_host = "https://api.weex.com"
         endpoint = "/capi/v2/order/uploadAiLog"
-        url = self.base_url + endpoint
+        url = log_host + endpoint
         
         # 1. Build Payload
         payload = {
@@ -96,6 +98,7 @@ class WeexClient:
         body_json = json.dumps(payload)
         
         # 2. Generate Signature
+        # Note: We sign the endpoint path, which matches the URL path
         timestamp, sign = self._get_signature("POST", endpoint, body_json)
 
         # 3. Send Request
@@ -109,7 +112,8 @@ class WeexClient:
         }
 
         try:
-            response = requests.post(url, data=body_json, headers=headers, timeout=5)
+            # Increased timeout to 10s to prevent network flukes
+            response = requests.post(url, data=body_json, headers=headers, timeout=10)
             if response.status_code == 200:
                 print(f"✅ AI LOG SENT: {action} on {symbol}")
                 return True
