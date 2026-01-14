@@ -4,6 +4,7 @@ numpy
 fastapi
 uvicorn
 python-dotenv
+aiohttp
 websockets
 requests
 gunicorn
