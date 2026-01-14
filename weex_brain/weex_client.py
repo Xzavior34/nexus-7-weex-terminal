@@ -92,7 +92,7 @@ class WeexClient:
 
         return None # All sources failed (Very unlikely)
 
-    # --- TRADING EXECUTION (STILL ON WEEX) ---
+    # --- AUTHENTICATION HELPER ---
     def _get_signature(self, method, request_path, body=""):
         timestamp = str(int(time.time() * 1000))
         message = timestamp + method.upper() + request_path + body
@@ -104,6 +104,59 @@ class WeexClient:
         sign_b64 = base64.b64encode(signature).decode('utf-8')
         return timestamp, sign_b64
 
+    # --- 🚨 OFFICIAL HACKATHON COMPLIANCE LOGGING 🚨 ---
+    def upload_ai_log(self, symbol, action, logic, risk_score):
+        """
+        Streams AI decisions to WEEX servers in real-time.
+        Endpoint: /capi/v2/order/uploadAiLog
+        """
+        endpoint = "/capi/v2/order/uploadAiLog"
+        url = self.base_url + endpoint
+        
+        # 1. Build the Compliance Payload
+        payload = {
+            "orderId": None,
+            "stage": "Decision Making",
+            "model": "Nexus-7-Heuristic-v1",
+            "input": {
+                "symbol": symbol,
+                "strategy": "Momentum Scalp",
+                "parameters": "Threshold: 0.3%"
+            },
+            "output": {
+                "action": action,
+                "risk_score": risk_score
+            },
+            "explanation": logic
+        }
+        body_json = json.dumps(payload)
+        
+        # 2. Generate Signature using existing helper
+        timestamp, sign = self._get_signature("POST", endpoint, body_json)
+
+        # 3. Send Headers
+        headers = {
+            "Content-Type": "application/json",
+            "ACCESS-KEY": self.key,
+            "ACCESS-SIGN": sign,
+            "ACCESS-PASSPHRASE": self.passphrase,
+            "ACCESS-TIMESTAMP": timestamp,
+            "locale": "en-US"
+        }
+
+        try:
+            response = requests.post(url, data=body_json, headers=headers, timeout=5)
+            if response.status_code == 200:
+                print(f"✅ AI LOG SENT: {action} on {symbol}")
+                return True
+            else:
+                print(f"⚠️ LOG FAILED ({response.status_code}): {response.text}")
+                return False
+        except Exception as e:
+            print(f"⚠️ LOG ERROR: {e}")
+            return False
+
+    # --- TRADING EXECUTION ---
     def place_order(self, symbol, side, size):
         params = {
             "symbol": symbol + "_UMCBL",
