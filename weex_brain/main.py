@@ -2,7 +2,7 @@
 PROJECT: NEXUS-7 (WEEX AI HACKATHON ENTRY)
 TEAM: WEEX Alpha Awakens Forked Entry
 STRATEGY: Heuristic Momentum Scalping with Anomaly Detection (BTC Veto)
-COMPLIANCE: Real-Time API Streaming via weex_client
+COMPLIANCE: REAL-TIME LIVE TRADING (Money at Risk)
 """
 
 import uvicorn
@@ -17,12 +17,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from weex_client import weex_bot
 
 # --- ⚙️ CONFIGURATION ---
-LIVE_TRADING = False
+LIVE_TRADING = True   # <--- ⚠️ REAL MONEY MODE ENABLED
 LEVERAGE = 10
-BET_PERCENTAGE = 0.15
-MAX_OPEN_POSITIONS = 5
-HISTORY_SIZE = 300
-LOOP_DELAY = 0.5
+BET_PERCENTAGE = 0.95 # Aggressive: Use 95% of available balance per trade
+MAX_OPEN_POSITIONS = 3 # Safety: Max 3 trades at once
+LOOP_DELAY = 1.0
 
 # RULE: Trade only designated pairs
 ALLOWED_PAIRS = [
@@ -31,7 +30,8 @@ ALLOWED_PAIRS = [
 ]
 
 # --- 📉 STRATEGY: IRON-CLAD (0.3%) ---
-MOMENTUM_THRESHOLD = 1.003
+# Adjusted for faster execution
+MOMENTUM_THRESHOLD = 1.002 # Buy if price moves 0.2% up quickly
 STOP_LOSS_PCT = 0.02
 TRAILING_DISTANCE = 0.008
 
@@ -44,7 +44,7 @@ PARTIAL_TAKE_PROFIT = 0.045
 FILES = {"wallet": "wallet_data.json"}
 
 # --- 🧠 STATE MEMORY ---
-price_history = {pair: deque(maxlen=HISTORY_SIZE) for pair in ALLOWED_PAIRS}
+price_history = {pair: deque(maxlen=300) for pair in ALLOWED_PAIRS}
 active_positions = {}
 last_known_prices = {}
 
@@ -64,15 +64,10 @@ def load_wallet():
         try:
             with open(FILES["wallet"], "r") as f: 
                 data = json.load(f)
-                total_equity = data.get("total", 1000.0)
-                return {
-                    "total": total_equity,
-                    "available": total_equity, 
-                    "in_positions": 0.0,
-                    "unrealized_pnl": 0.0
-                }
+                return data
         except: pass
-    return {"total": 1000.0, "available": 1000.0, "in_positions": 0.0, "unrealized_pnl": 0.0}
+    # Default fallback if no file
+    return {"total": 100.0, "available": 100.0, "in_positions": 0.0, "unrealized_pnl": 0.0}
 
 SIMULATED_WALLET = load_wallet()
 
@@ -95,14 +90,12 @@ async def fetch_all_prices():
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("⚡ NEXUS-7: REAL-TIME COMPLIANCE MODE")
+    print("⚡ NEXUS-7: REAL-TIME TRADING ENGINE STARTED")
     
     async def keep_alive():
         try:
             while True:
-                # Check connection state before pinging
-                if websocket.client_state.name != 'CONNECTED':
-                    break
+                if websocket.client_state.name != 'CONNECTED': break
                 await websocket.send_json({"type": "ping", "message": "HEARTBEAT"})
                 await asyncio.sleep(20) 
         except: pass
@@ -144,32 +137,30 @@ async def websocket_endpoint(websocket: WebSocket):
                     # LOGIC: IRON-CLAD DEFENSE
                     if current_price <= pos["stop_loss"]: should_sell, reason = True, "Stop Loss"
                     elif pct >= PARTIAL_TAKE_PROFIT: should_sell, reason = True, "Moon Target"
+                    elif current_price <= trail_stop and pct >= 0.008: should_sell, reason = True, "Trailing Stop"
                     
+                    # Break-even and lock logic
                     elif pct >= BREAK_EVEN_TRIGGER and pos["stop_loss"] < pos["price"]:
                         active_positions[pair]["stop_loss"] = pos["price"]
                         msg_text = f"🛡️ SHIELD UP: Risk Free"
-                        # 📡 LOG TO WEEX
-                        asyncio.create_task(asyncio.to_thread(weex_bot.upload_ai_log, pair, "MODIFY_STOP", "Break-Even Triggered", "0.0"))
-                    
                     elif pct >= PROFIT_LOCK_LEVEL_1 and pos["stop_loss"] < pos["price"] * 1.005:
                         active_positions[pair]["stop_loss"] = pos["price"] * 1.005
                         msg_text = f"🔒 LEVEL 1: Locked +0.5%"
-                    
-                    elif pct >= PROFIT_LOCK_LEVEL_2 and pos["stop_loss"] < pos["price"] * 1.015:
-                        active_positions[pair]["stop_loss"] = pos["price"] * 1.015
-                        msg_text = f"🔒 LEVEL 2: Locked +1.5%"
-
-                    elif current_price <= trail_stop and pct >= 0.008:
-                        should_sell, reason = True, "Trailing Stop"
 
                     if should_sell:
+                        # --- ⚠️ REAL SELL EXECUTION ---
+                        if LIVE_TRADING:
+                            print(f"💰 SELLING {pair} ({reason})")
+                            qty_to_sell = pos.get("quantity", round(pos["size"] / pos["price"], 5))
+                            asyncio.create_task(asyncio.to_thread(weex_bot.place_order, pair, "SELL", qty_to_sell))
+                        # ------------------------------
+
                         pnl = pos["size"] * pct * LEVERAGE
                         SIMULATED_WALLET["available"] += (pos["size"] + pnl)
                         SIMULATED_WALLET["in_positions"] -= pos["size"]
                         del active_positions[pair]
                         
                         save_wallet(SIMULATED_WALLET)
-                        # 📡 LOG TO WEEX
                         asyncio.create_task(asyncio.to_thread(weex_bot.upload_ai_log, pair, "SELL", reason, "0.0"))
                         msg_type, msg_text = "SELL", f"💰 SOLD {pair}: {reason}"
                     else:
@@ -185,57 +176,36 @@ async def websocket_endpoint(websocket: WebSocket):
                         momentum = (sum(history[-3:])/3) / (sum(history[-20:])/20)
                         if momentum > MOMENTUM_THRESHOLD:
                             bet = SIMULATED_WALLET["available"] * BET_PERCENTAGE
-                            if bet >= 10:
+                            
+                            # Calculate exact Quantity for API
+                            quantity = round(bet / current_price, 5)
+
+                            if bet >= 5: # Min trade size check (approx 5 USDT)
+                                # --- ⚠️ REAL BUY EXECUTION ---
+                                if LIVE_TRADING:
+                                    print(f"⚡ BUYING {pair} (Qty: {quantity})")
+                                    asyncio.create_task(asyncio.to_thread(weex_bot.place_order, pair, "BUY", quantity))
+                                # -----------------------------
+
                                 SIMULATED_WALLET["available"] -= bet
                                 SIMULATED_WALLET["in_positions"] += bet
                                 active_positions[pair] = {
-                                    "price": current_price, "size": bet, 
+                                    "price": current_price, 
+                                    "size": bet, 
+                                    "quantity": quantity, # Store quantity for selling later
                                     "stop_loss": current_price * (1 - STOP_LOSS_PCT),
-                                    "high_price": current_price, "type": "TREND"
+                                    "high_price": current_price, 
+                                    "type": "TREND"
                                 }
                                 
                                 save_wallet(SIMULATED_WALLET)
-                                # 📡 LOG TO WEEX
                                 asyncio.create_task(asyncio.to_thread(weex_bot.upload_ai_log, pair, "BUY", "Momentum > 0.3%", "0.5"))
                                 msg_type, msg_text = "BUY", f"⚡ ENTRY {pair}"
 
-                # 📡 BROADCAST (FIXED CRASH HERE)
+                # 📡 BROADCAST
                 total_unrealized = sum(p.get("unrealized_pnl", 0) for p in active_positions.values())
                 SIMULATED_WALLET["total"] = SIMULATED_WALLET["available"] + SIMULATED_WALLET["in_positions"] + total_unrealized
                 
                 payload = {
                     "timestamp": datetime.now().strftime("%H:%M:%S"),
-                    "symbol": pair, "price": current_price, "type": msg_type, "message": msg_text, "veto_status": veto_active,
-                    "wallet": {
-                        "total": round(SIMULATED_WALLET["total"], 2),
-                        "available": round(SIMULATED_WALLET["available"], 2),
-                        "inPositions": round(SIMULATED_WALLET["in_positions"], 2),
-                        "unrealizedPnL": round(total_unrealized, 2),
-                        "pnlPercent": round((total_unrealized/1000)*100, 2),
-                        "positions": [{"symbol": k, "pnl": round((v.get("unrealized_pnl",0)/v["size"])*100/LEVERAGE, 2), "type": v["type"]} for k, v in active_positions.items()]
-                    }
-                }
-                
-                # --- 🛡️ CRASH PREVENTION SHIELD ---
-                try:
-                    await websocket.send_text(json.dumps(payload))
-                except RuntimeError:
-                    # Connection closed by user, exit loop gracefully
-                    break
-                except Exception:
-                    # Any other send error, stop loop
-                    break
-                # ----------------------------------
-
-                await asyncio.sleep(0.01)
-
-            elapsed = time.time() - loop_start
-            await asyncio.sleep(max(0, LOOP_DELAY - elapsed))
-
-    except WebSocketDisconnect: 
-        print("❌ DASHBOARD DISCONNECTED (Clean exit)")
-    finally:
-        heartbeat_task.cancel()
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+                    "symbol": pair, "price": current_price, "type": msg_type, "message": msg_text,
