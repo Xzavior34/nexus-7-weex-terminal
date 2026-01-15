@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts';
-import { Terminal, Shield, Wallet, Zap, Activity, Lock, Cpu, Wifi, AlertTriangle, TrendingUp, DollarSign } from 'lucide-react';
+import { AreaChart, Area, ResponsiveContainer } from 'recharts';
+import { Terminal, Shield, Wallet, Zap, Activity, Cpu, Wifi, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // --- TYPES ---
-type LogType = 'AI_SCAN' | 'WEEX_API' | 'RISK_CHECK' | 'OPPORTUNITY' | 'EXECUTION' | 'VETO_BLOCK';
+type LogType = 'AI_SCAN' | 'WEEX_API' | 'RISK_CHECK' | 'OPPORTUNITY' | 'EXECUTION' | 'VETO_BLOCK' | 'INFO';
 
 interface LogMessage {
   id: string;
@@ -13,14 +13,13 @@ interface LogMessage {
   message: string;
 }
 
-// --- VISUAL CHART DATA (Flowing Effect) ---
+// --- VISUAL CHART DATA ---
 const initialSparkline = Array.from({ length: 40 }, (_, i) => ({
   value: 100 + Math.random() * 20
 }));
 
 // --- COMPONENTS ---
 
-// 🟢 GLOWING BADGE COMPONENT
 const StatusBadge = ({ icon: Icon, label, active = true, color = "green" }: any) => {
   const colorMap: any = {
     green: "text-[#00ff9d] border-[#00ff9d]/30 bg-[#00ff9d]/10 shadow-[0_0_15px_rgba(0,255,157,0.3)]",
@@ -39,7 +38,6 @@ const StatusBadge = ({ icon: Icon, label, active = true, color = "green" }: any)
   );
 };
 
-// 🔥 ADVANCED MARKET CARD (Glassmorphism + Neon)
 const MarketCard = ({ symbol, price, change, isPositive, data }: any) => (
   <motion.div 
     initial={{ opacity: 0, y: 10 }}
@@ -50,7 +48,6 @@ const MarketCard = ({ symbol, price, change, isPositive, data }: any) => (
         : 'bg-gradient-to-br from-[#050505] via-[#0a0a0a] to-[#ff3b30]/5 border border-[#ff3b30]/20 hover:border-[#ff3b30]/50'
       }`}
   >
-    {/* Chart Background */}
     <div className="absolute inset-x-0 bottom-0 h-32 opacity-30 group-hover:opacity-50 transition-opacity duration-500 mask-image-gradient">
        <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data}>
@@ -72,7 +69,6 @@ const MarketCard = ({ symbol, price, change, isPositive, data }: any) => (
       </ResponsiveContainer>
     </div>
 
-    {/* Content */}
     <div className="relative z-10 flex justify-between items-start">
       <div>
         <div className="flex items-center gap-2 mb-1">
@@ -95,12 +91,12 @@ export default function Dashboard() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [chartData, setChartData] = useState(initialSparkline);
-  const [vetoStatus, setVetoStatus] = useState("GREEN"); // Default Safe
+  const [vetoStatus, setVetoStatus] = useState("GREEN");
 
   // --- 💰 WALLET DATA ---
   const [wallet, setWallet] = useState({
-    total: 1000.00,        
-    available: 1000.00,
+    total: 0.00,        
+    available: 0.00,
     inPositions: 0.00,
     unrealizedPnL: 0.00,
     pnlPercent: 0.00,
@@ -115,11 +111,10 @@ export default function Dashboard() {
     DOGE: { price: 0.1425, change: "+12.5%", start: 0.1300 } 
   });
 
-  // --- ANIMATE CHART ---
   useEffect(() => {
     const interval = setInterval(() => {
       setChartData(prev => {
-        const newVal = prev[prev.length - 1].value + (Math.random() - 0.5) * 8; // More volatility visual
+        const newVal = prev[prev.length - 1].value + (Math.random() - 0.5) * 8;
         return [...prev.slice(1), { value: newVal }];
       });
     }, 800);
@@ -128,7 +123,7 @@ export default function Dashboard() {
 
   // --- WEBSOCKET CONNECTION ---
   useEffect(() => {
-    // ⚠️ UPDATE THIS URL TO YOUR REAL BACKEND URL IF NEEDED
+    // ⚠️ CRITICAL: MATCH THIS URL TO YOUR RENDER URL
     const wsUrl = "wss://nexus-7-weex-terminal.onrender.com/ws/stream"; 
     const ws = new WebSocket(wsUrl);
 
@@ -140,28 +135,37 @@ export default function Dashboard() {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        addLog(data.type, data.message);
         
-        // 🚦 VETO STATUS UPDATE
-        if (data.veto_status) {
-           setVetoStatus(data.veto_status);
+        // LOGGING
+        if (data.message) {
+            // Filter out repetitive scans to keep logs clean
+            if (!data.message.includes("System Active")) {
+                addLog(data.type || "INFO", data.message);
+            }
         }
+        
+        if (data.veto_status) setVetoStatus(data.veto_status);
 
-        // 💰 WALLET UPDATE
+        // --- 💰 CRITICAL FIX: WALLET MAPPING ---
+        // Maps backend keys (in_pos) to frontend keys (inPositions)
         if (data.wallet) {
+            const safeTotal = data.wallet.total || 1; // Prevent div/0
+            const safePnl = data.wallet.unrealized_pnl || 0;
+            const calculatedPercent = (safePnl / safeTotal) * 100;
+
             setWallet({
-                total: data.wallet.total,
-                available: data.wallet.available,
-                inPositions: data.wallet.inPositions,
-                unrealizedPnL: data.wallet.unrealizedPnL,
-                pnlPercent: data.wallet.pnlPercent,
+                total: data.wallet.total || 0,
+                available: data.wallet.available || 0,
+                inPositions: data.wallet.in_pos || 0, // <--- FIXED MAPPING HERE
+                unrealizedPnL: data.wallet.unrealized_pnl || 0, // <--- FIXED MAPPING HERE
+                pnlPercent: parseFloat(calculatedPercent.toFixed(2)),
                 positions: data.wallet.positions || [] 
             });
         }
 
         // ⚡ PRICE UPDATE
-        if (data.price) {
-            const sym = data.symbol.replace("USDT", "");
+        if (data.price && data.symbol) {
+            const sym = data.symbol.replace("USDT", "").replace("cmt_", "").toUpperCase();
             
             if (prices[sym as keyof typeof prices]) {
               setPrices(prev => {
@@ -211,7 +215,7 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-[#020202] text-white font-sans selection:bg-[#00ff9d] selection:text-black pb-10 overflow-hidden relative">
       
-      {/* 🌌 AMBIENT BACKGROUND GLOWS */}
+      {/* 🌌 BACKGROUND */}
       <div className="fixed top-0 left-0 w-[500px] h-[500px] bg-[#00ff9d]/5 rounded-full blur-[120px] pointer-events-none" />
       <div className="fixed bottom-0 right-0 w-[500px] h-[500px] bg-[#bf5af2]/5 rounded-full blur-[120px] pointer-events-none" />
 
@@ -227,14 +231,12 @@ export default function Dashboard() {
           </div>
           
           <div className="flex gap-4">
-            {/* 🚦 VETO STATUS INDICATOR */}
             <StatusBadge 
                 icon={vetoStatus === "RED" ? AlertTriangle : Shield} 
                 label={vetoStatus === "RED" ? "ATOMIC VETO: ACTIVE" : "SYSTEM: SECURE"} 
                 active={true} 
                 color={vetoStatus === "RED" ? "red" : "green"} 
             />
-
             <StatusBadge icon={Wifi} label={isConnected ? "FEED: LIVE" : "FEED: CONNECTING"} active={isConnected} color="green" />
             <StatusBadge icon={Cpu} label="AI ENGINE: 100%" color="purple" />
           </div>
@@ -244,7 +246,7 @@ export default function Dashboard() {
       {/* 🟢 MAIN GRID */}
       <main className="max-w-[1600px] mx-auto px-6 pt-8 grid grid-cols-12 gap-6 relative z-10">
         
-        {/* LEFT: MARKET OVERVIEW (Col-span-8) */}
+        {/* LEFT: MARKET OVERVIEW */}
         <div className="col-span-12 lg:col-span-8 space-y-6">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-xs font-mono text-[#00ff9d] uppercase tracking-[0.2em] flex items-center gap-2 drop-shadow-md">
@@ -252,7 +254,6 @@ export default function Dashboard() {
             </h2>
           </div>
 
-          {/* ⚡ 4-GRID LAYOUT */}
           <div className="grid grid-cols-2 gap-4">
             <MarketCard symbol="BTC" price={`$${prices.BTC.price.toLocaleString()}`} change={prices.BTC.change} isPositive={!prices.BTC.change.includes("-")} data={chartData} />
             <MarketCard symbol="SOL" price={`$${prices.SOL.price.toLocaleString()}`} change={prices.SOL.change} isPositive={!prices.SOL.change.includes("-")} data={chartData} />
@@ -260,7 +261,7 @@ export default function Dashboard() {
             <MarketCard symbol="DOGE" price={`$${prices.DOGE.price.toFixed(4)}`} change={prices.DOGE.change} isPositive={!prices.DOGE.change.includes("-")} data={chartData} />
           </div>
 
-          {/* TERMINAL LOGS (Cyberpunk Style) */}
+          {/* TERMINAL LOGS */}
           <div className="bg-[#050505]/90 border border-[#00ff9d]/20 rounded-2xl overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.5)] h-[420px] flex flex-col relative group hover:border-[#00ff9d]/40 transition-colors">
             <div className="absolute top-0 w-full h-[1px] bg-gradient-to-r from-transparent via-[#00ff9d] to-transparent opacity-50" />
             
@@ -299,12 +300,10 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* RIGHT: WALLET & POSITIONS (Col-span-4) */}
+        {/* RIGHT: WALLET & POSITIONS */}
         <div className="col-span-12 lg:col-span-4 space-y-6">
           
-          {/* 💰 PRO WALLET CARD */}
           <div className="bg-gradient-to-b from-[#0a0a0a] to-black border border-white/10 rounded-2xl p-6 relative overflow-hidden group hover:border-[#00ff9d]/30 transition-all duration-500 shadow-2xl">
-            {/* Background Glow */}
             <div className="absolute top-0 right-0 w-48 h-48 bg-[#00ff9d]/10 rounded-full blur-[80px] -mr-10 -mt-10 group-hover:bg-[#00ff9d]/20 transition-all duration-700"/>
             
             <div className="flex justify-between items-start mb-8 relative z-10">
@@ -327,18 +326,17 @@ export default function Dashboard() {
 
                 <div className="grid grid-cols-2 gap-3 mb-6">
                 <div className="bg-white/5 rounded-xl p-3 border border-white/5 hover:bg-white/10 transition-colors">
-                    <div className="text-gray-500 text-[9px] uppercase tracking-wider mb-1">Available Margin</div>
+                    <div className="text-gray-500 text-[9px] uppercase tracking-wider mb-1">Available</div>
                     <div className="text-lg font-mono text-white">${wallet.available.toLocaleString()}</div>
                 </div>
                 <div className="bg-white/5 rounded-xl p-3 border border-white/5 hover:bg-white/10 transition-colors">
-                    <div className="text-gray-500 text-[9px] uppercase tracking-wider mb-1">Active Exposure</div>
+                    <div className="text-gray-500 text-[9px] uppercase tracking-wider mb-1">In Positions</div>
                     <div className="text-lg font-mono text-white">${wallet.inPositions.toLocaleString()}</div>
                 </div>
                 </div>
             </div>
           </div>
 
-          {/* 🔥 DYNAMIC POSITIONS LIST 🔥 */}
           <div className="bg-[#050505] border border-white/10 rounded-2xl p-6 min-h-[200px] shadow-lg">
              <div className="flex justify-between items-center border-b border-white/10 pb-4 mb-4">
                 <div className="text-gray-400 text-[10px] uppercase font-bold tracking-widest flex items-center gap-2">
@@ -380,7 +378,6 @@ export default function Dashboard() {
               </div>
           </div>
 
-          {/* ⚠️ RISK MANAGER CARD (UPDATED TO 10X) */}
           <div className="bg-gradient-to-r from-black to-[#0a0a0a] border border-white/10 rounded-2xl p-6 relative overflow-hidden">
             <div className="flex items-center gap-2 mb-4 relative z-10">
               <Shield size={16} className="text-[#ffcc00]" />
@@ -388,7 +385,6 @@ export default function Dashboard() {
             </div>
             
             <div className="flex justify-between items-end mb-3 relative z-10">
-               {/* UPDATED TO 10X */}
                <span className="text-4xl font-mono font-bold text-white drop-shadow-lg">{vetoStatus === "RED" ? "0x" : "10x"}</span>
                <span className={`text-[10px] font-bold border px-2 py-1 rounded backdrop-blur-sm ${
                  vetoStatus === "RED" 
@@ -399,14 +395,12 @@ export default function Dashboard() {
                </span>
             </div>
             
-            {/* UPDATED BAR FOR 10X */}
             <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden relative z-10">
                <div className={`h-full rounded-full shadow-[0_0_15px_currentColor] transition-all duration-500 ${
                    vetoStatus === "RED" ? "bg-[#ff3b30] w-full text-[#ff3b30]" : "bg-[#ffcc00] w-3/4 text-[#ffcc00]"
                }`} />
             </div>
 
-            {/* Background Texture */}
              <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 mix-blend-overlay"></div>
           </div>
 
