@@ -8,15 +8,14 @@ import os
 
 class WeexClient:
     def __init__(self):
-        # On Render, we use the standard API URL
+        # Render can connect to the standard URL
         self.base_url = "https://api.weex.com"
         
-        # Keys (Hardcoded as you requested)
+        # YOUR KEYS (Hardcoded)
         self.key = "weex_d6eac84d6220ac893cd2fb10aadcf493"
         self.secret = "dd6dda820151a46c6ac9dc1e0baf1d846ba9d1c8deee0d93aa3e71d516515c3b"
         self.passphrase = "weex0717289"
 
-        # Standard Headers
         self.common_headers = {
             "Content-Type": "application/json",
             "User-Agent": "Nexus-7/Render"
@@ -34,7 +33,7 @@ class WeexClient:
         return timestamp, sign_b64
 
     def get_market_price(self, symbol):
-        # Use Binance for fast price checking
+        # Fallback to Binance for speed
         clean_sym = symbol.replace("_UMCBL", "").replace("USDT", "") + "USDT"
         try:
             url = f"https://api.binance.com/api/v3/ticker/price?symbol={clean_sym}"
@@ -47,8 +46,6 @@ class WeexClient:
 
     def place_order(self, symbol, side, size):
         endpoint = "/api/v1/order/submit"
-        
-        # Ensure correct symbol format for futures
         if "_UMCBL" not in symbol and "USDT" in symbol:
             symbol += "_UMCBL"
 
@@ -72,7 +69,6 @@ class WeexClient:
         })
         
         print(f"🚀 SENDING ORDER: {side.upper()} {symbol} (Size: {size})...")
-        
         try:
             response = requests.post(self.base_url + endpoint, headers=headers, data=body, timeout=10)
             print(f"📥 WEEX SAYS: {response.text}")
@@ -80,5 +76,24 @@ class WeexClient:
         except Exception as e:
             print(f"❌ CONNECTION ERROR: {e}")
             return {"error": str(e)}
+
+    # Official Hackathon Log Function
+    def upload_ai_log(self, symbol, action, logic, risk_score):
+        try:
+            endpoint = "/capi/v2/order/uploadAiLog"
+            payload = {
+                "orderId": None, "stage": "Execution", "model": "Nexus-7",
+                "input": {"symbol": symbol}, "output": {"action": action, "risk": risk_score},
+                "explanation": logic
+            }
+            body = json.dumps(payload)
+            timestamp, sign = self._get_signature("POST", endpoint, body)
+            headers = self.common_headers.copy()
+            headers.update({
+                "ACCESS-KEY": self.key, "ACCESS-SIGN": sign,
+                "ACCESS-TIMESTAMP": timestamp, "ACCESS-PASSPHRASE": self.passphrase
+            })
+            requests.post(self.base_url + endpoint, headers=headers, data=body, timeout=2)
+        except: pass
 
 weex_bot = WeexClient()
