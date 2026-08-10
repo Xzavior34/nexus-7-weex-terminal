@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAudioFeedback } from "./useAudioFeedback";
 import {
-  engineApi,
+  api,
   EngineStatus,
   EnginePosition,
   EngineTrade,
   EngineDecision,
   EquityPoint,
-} from "@/lib/engineApi";
+  EngineApiAuthError,
+  EngineApiWakingUpError,
+} from "@/services/api";
 
 export interface LogEntry {
   id: string;
@@ -19,18 +21,15 @@ export interface LogEntry {
 interface UseEngineDataOptions {
   audioEnabled?: boolean;
   audioVolume?: number;
-  pollIntervalMs?: number;
+  pollIntervalMs?: number; // Default: 4000ms (3–5 seconds)
 }
 
 /**
- * Replaces the old useTradeSignals WebSocket hook (which pointed at a
- * backend that no longer exists). This polls the real engine's REST API —
- * appropriate for a monitoring dashboard, and the only sane option for a
- * bearer-token-protected API called straight from the browser (browsers
- * can't set an Authorization header on a raw WebSocket handshake anyway).
+ * Hook to poll the Nexus-7 engine REST API every 3–5 seconds.
+ * Authenticates with Bearer token and handles waking state / 401 errors cleanly.
  */
 export const useEngineData = (options: UseEngineDataOptions = {}) => {
-  const { audioEnabled = true, audioVolume = 0.5, pollIntervalMs = 8000 } = options;
+  const { audioEnabled = true, audioVolume = 0.5, pollIntervalMs = 4000 } = options;
 
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [positions, setPositions] = useState<Record<string, EnginePosition>>({});
@@ -39,6 +38,8 @@ export const useEngineData = (options: UseEngineDataOptions = {}) => {
   const [equityCurve, setEquityCurve] = useState<EquityPoint[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+  const [isWakingUp, setIsWakingUp] = useState(true);
+  const [isUnauthorized, setIsUnauthorized] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
 
   const seenDecisionIds = useRef<Set<number>>(new Set());
@@ -49,18 +50,28 @@ export const useEngineData = (options: UseEngineDataOptions = {}) => {
     const time = new Date(d.ts).toLocaleTimeString();
     if (d.executed) {
       return {
-        id: `d-${d.id}`, timestamp: time, type: "execution",
+        id: `d-${d.id}`,
+        timestamp: time,
+        type: "execution",
         message: `[${d.symbol}] EXECUTED ${d.ai_action ?? d.technical_bias} — confidence ${d.ai_confidence ?? "?"}`,
       };
     }
-    if (d.reject_reason?.startsWith("daily_loss_limit") || d.reject_reason?.startsWith("stale_signal") || d.reject_reason?.includes("cooldown")) {
+    if (
+      d.reject_reason?.startsWith("daily_loss_limit") ||
+      d.reject_reason?.startsWith("stale_signal") ||
+      d.reject_reason?.includes("cooldown")
+    ) {
       return {
-        id: `d-${d.id}`, timestamp: time, type: "risk",
+        id: `d-${d.id}`,
+        timestamp: time,
+        type: "risk",
         message: `[${d.symbol}] blocked — ${d.reject_reason}`,
       };
     }
     return {
-      id: `d-${d.id}`, timestamp: time, type: "ai",
+      id: `d-${d.id}`,
+      timestamp: time,
+      type: "ai",
       message: `[${d.symbol}] HOLD (bias=${d.technical_bias ?? "?"} ai=${d.ai_action ?? "?"}/${d.ai_confidence ?? "?"}) — ${d.reject_reason ?? "no reason logged"}`,
     };
   }, []);
@@ -68,11 +79,11 @@ export const useEngineData = (options: UseEngineDataOptions = {}) => {
   const poll = useCallback(async () => {
     try {
       const [statusRes, positionsRes, tradesRes, decisionsRes, equityRes] = await Promise.all([
-        engineApi.status(),
-        engineApi.positions(),
-        engineApi.trades(30),
-        engineApi.decisions(30),
-        engineApi.equityCurve(200),
+        api.getStatus(),
+        api.getPositions(),
+        api.getTrades(30),
+        api.getDecisions(30),
+        api.getEquityCurve(200),
       ]);
 
       setStatus(statusRes);
@@ -101,10 +112,23 @@ export const useEngineData = (options: UseEngineDataOptions = {}) => {
 
       if (!isConnected) playSound("success");
       setIsConnected(true);
+      setIsWakingUp(false);
+      setIsUnauthorized(false);
       setLastError(null);
-    } catch (e) {
+    } catch (e: any) {
       setIsConnected(false);
-      setLastError(e instanceof Error ? e.message : String(e));
+      if (e instanceof EngineApiAuthError) {
+        setIsUnauthorized(true);
+        setIsWakingUp(false);
+        setLastError(e.message);
+      } else if (e instanceof EngineApiWakingUpError) {
+        setIsWakingUp(true);
+        setIsUnauthorized(false);
+        setLastError("Connecting to Engine...");
+      } else {
+        setIsWakingUp(false);
+        setLastError(e instanceof Error ? e.message : String(e));
+      }
     }
   }, [decisionToLog, isConnected, playSound]);
 
@@ -112,8 +136,7 @@ export const useEngineData = (options: UseEngineDataOptions = {}) => {
     poll();
     const interval = setInterval(poll, pollIntervalMs);
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pollIntervalMs]);
+  }, [poll, pollIntervalMs]);
 
   const clearLogs = useCallback(() => setLogs([]), []);
 
@@ -125,7 +148,10 @@ export const useEngineData = (options: UseEngineDataOptions = {}) => {
     equityCurve,
     logs,
     isConnected,
+    isWakingUp,
+    isUnauthorized,
     lastError,
     clearLogs,
+    refetch: poll,
   };
 };

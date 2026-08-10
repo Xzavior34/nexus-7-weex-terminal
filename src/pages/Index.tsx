@@ -16,10 +16,19 @@ const Index = () => {
   const [audioVolume, setAudioVolume] = useState(0.5);
   const [sessionTime, setSessionTime] = useState(0);
 
-  const { status, positions, decisions, equityCurve, logs, isConnected, lastError } =
-    useEngineData({ audioEnabled, audioVolume });
+  const {
+    status,
+    positions,
+    decisions,
+    equityCurve,
+    logs,
+    isConnected,
+    isWakingUp,
+    isUnauthorized,
+    lastError,
+  } = useEngineData({ audioEnabled, audioVolume });
 
-  const symbols = status?.config.pairs ?? ["BTC/USDT", "ETH/USDT"];
+  const symbols = status?.config?.pairs ?? ["BTC/USDT", "ETH/USDT"];
   const livePrices = useLivePrices(symbols);
 
   const currentPriceMap = useMemo(() => {
@@ -31,12 +40,10 @@ const Index = () => {
   }, [livePrices]);
 
   const dailyLossUsedPct = useMemo(
-    () => computeDailyLossUsedPct(equityCurve, status?.config.max_daily_loss_pct ?? 0),
+    () => computeDailyLossUsedPct(equityCurve, status?.config?.max_daily_loss_pct ?? 0),
     [equityCurve, status]
   );
 
-  // Recent decision activity, used to drive the heartbeat's "activity level" —
-  // a real signal instead of the old hardcoded 72.
   const recentDecisionRate = useMemo(() => {
     if (decisions.length === 0) return 20;
     const fiveMinAgo = Date.now() - 5 * 60 * 1000;
@@ -58,6 +65,8 @@ const Index = () => {
     const s = seconds % 60;
     return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
+
+  const currentEquity = status?.last_equity ?? status?.last_equity_usd ?? null;
 
   return (
     <div className="min-h-screen w-full bg-background">
@@ -84,9 +93,17 @@ const Index = () => {
               <p className="text-sm text-muted-foreground mt-1">
                 Transparent AI trading decisions • Binance Spot Testnet + Gemini
               </p>
-              {lastError && (
+              {isUnauthorized ? (
+                <p className="text-xs text-destructive mt-1 font-semibold">
+                  🚨 Authentication Error: Missing or invalid Bearer token. Check VITE_ENGINE_TOKEN in your environment.
+                </p>
+              ) : isWakingUp ? (
+                <p className="text-xs text-amber-400 mt-1 font-medium animate-pulse">
+                  ⚡ Connecting to Engine... (Render backend waking up from sleep)
+                </p>
+              ) : lastError ? (
                 <p className="text-xs text-destructive mt-1">Engine connection error: {lastError}</p>
-              )}
+              ) : null}
             </div>
             <div className="flex items-center gap-4">
               <AudioControls
@@ -99,10 +116,22 @@ const Index = () => {
                 <motion.span
                   animate={{ opacity: [1, 0.3, 1] }}
                   transition={{ duration: 1.5, repeat: Infinity }}
-                  className="w-2 h-2 rounded-full bg-primary"
+                  className={`w-2 h-2 rounded-full ${
+                    isConnected ? "bg-primary" : isUnauthorized ? "bg-destructive" : "bg-amber-400"
+                  }`}
                 />
-                <span className="text-sm font-bold text-primary">
-                  {isConnected ? (status?.status ?? "LIVE").toString().toUpperCase() : "CONNECTING"}
+                <span
+                  className={`text-sm font-bold ${
+                    isConnected ? "text-primary" : isUnauthorized ? "text-destructive" : "text-amber-400"
+                  }`}
+                >
+                  {isConnected
+                    ? (status?.status ?? "LIVE").toString().toUpperCase()
+                    : isWakingUp
+                    ? "CONNECTING TO ENGINE..."
+                    : isUnauthorized
+                    ? "UNAUTHORIZED (401)"
+                    : "CONNECTING"}
                 </span>
               </div>
               <div className="text-right px-4 py-2 rounded-xl bg-secondary/50 border border-border/50">
@@ -160,7 +189,7 @@ const Index = () => {
           {/* Right Column - Wallet & Risk */}
           <div className="lg:col-span-4 space-y-6">
             <WalletPnLPro
-              equityUsd={status?.last_equity_usd ?? null}
+              equityUsd={currentEquity}
               positions={positions}
               livePrices={currentPriceMap}
               isConnected={isConnected}
