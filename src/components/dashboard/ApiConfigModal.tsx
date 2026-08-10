@@ -10,12 +10,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Key, Server, Check, AlertCircle, RefreshCw } from "lucide-react";
+import { Key, Server, Check, AlertCircle, RefreshCw, Trash2 } from "lucide-react";
 import {
   getEngineToken,
   getEngineApiUrl,
   setStoredEngineToken,
   setStoredEngineApiUrl,
+  sanitizeToken,
   api,
 } from "@/services/api";
 
@@ -40,33 +41,54 @@ export function ApiConfigModal({ open, onOpenChange, onConfigSaved }: ApiConfigM
   }, [open]);
 
   const handleSave = () => {
-    setStoredEngineApiUrl(apiUrl.trim());
-    setStoredEngineToken(token.trim());
+    const cleanUrl = apiUrl.trim();
+    const cleanToken = sanitizeToken(token);
+
+    setStoredEngineApiUrl(cleanUrl);
+    setStoredEngineToken(cleanToken);
+    setToken(cleanToken);
+
     setTestResult({ success: true, message: "Settings saved to local storage." });
     if (onConfigSaved) onConfigSaved();
     setTimeout(() => onOpenChange(false), 800);
   };
 
+  const handleClear = () => {
+    setStoredEngineApiUrl("");
+    setStoredEngineToken("");
+    setApiUrl(getEngineApiUrl());
+    setToken("");
+    setTestResult({ success: true, message: "Cleared saved local credentials." });
+    if (onConfigSaved) onConfigSaved();
+  };
+
   const handleTestConnection = async () => {
     setIsTesting(true);
     setTestResult(null);
+
+    const cleanUrl = apiUrl.trim();
+    const cleanToken = sanitizeToken(token);
+
     try {
       // Temporarily store credentials for testing
-      setStoredEngineApiUrl(apiUrl.trim());
-      setStoredEngineToken(token.trim());
+      setStoredEngineApiUrl(cleanUrl);
+      setStoredEngineToken(cleanToken);
+      setToken(cleanToken);
 
       const res = await api.getStatus();
       setTestResult({
         success: true,
-        message: `Connected successfully! Engine state: "${res.status}". Equity: $${
-          res.last_equity ?? res.last_equity_usd ?? "N/A"
+        message: `Connected successfully! Engine status: "${res.status}". Equity: $${
+          res.last_equity ?? res.last_equity_usd ?? "0.00"
         }`,
       });
       if (onConfigSaved) onConfigSaved();
     } catch (err: any) {
       setTestResult({
         success: false,
-        message: err.message || "Connection failed. Please verify API URL and Bearer token.",
+        message:
+          err.message ||
+          "Connection failed. Please check your Engine Bearer token.",
       });
     } finally {
       setIsTesting(false);
@@ -75,14 +97,14 @@ export function ApiConfigModal({ open, onOpenChange, onConfigSaved }: ApiConfigM
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px] bg-card border-border/80 text-foreground backdrop-blur-xl">
+      <DialogContent className="sm:max-w-[500px] bg-card border-border/80 text-foreground backdrop-blur-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl font-bold font-sans">
             <Key className="w-5 h-5 text-primary" />
             Nexus-7 Engine API Configuration
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Configure the remote Engine API URL and Bearer Token to connect the GlassBox Terminal.
+            Configure the Engine API Base URL and secret Bearer Token to authenticate API requests.
           </DialogDescription>
         </DialogHeader>
 
@@ -109,18 +131,18 @@ export function ApiConfigModal({ open, onOpenChange, onConfigSaved }: ApiConfigM
           <div className="space-y-2">
             <Label htmlFor="token" className="text-xs font-semibold flex items-center gap-1.5">
               <Key className="w-3.5 h-3.5 text-amber-400" />
-              Engine Bearer Token (<code className="text-xs font-mono">ENGINE_TOKEN</code>)
+              Engine Bearer Token (<code className="text-xs font-mono">API_AUTH_TOKEN</code>)
             </Label>
             <Input
               id="token"
               type="password"
               value={token}
               onChange={(e) => setToken(e.target.value)}
-              placeholder="Enter engine bearer token..."
+              placeholder="Paste your API_AUTH_TOKEN here..."
               className="bg-background/50 border-border/60 text-xs font-mono"
             />
-            <p className="text-[10px] text-muted-foreground">
-              Must match the <code className="text-amber-400">API_AUTH_TOKEN</code> configured on the Render Python Engine backend.
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              ⚠️ Must match the <code className="text-amber-400">API_AUTH_TOKEN</code> environment variable configured on your Render dashboard (<code className="text-xs font-mono">nexus7-engine</code>).
             </p>
           </div>
 
@@ -144,23 +166,36 @@ export function ApiConfigModal({ open, onOpenChange, onConfigSaved }: ApiConfigM
         </div>
 
         <DialogFooter className="flex items-center justify-between gap-2 sm:justify-between">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleTestConnection}
-            disabled={isTesting}
-            className="border-primary/40 text-primary hover:bg-primary/10 text-xs"
-          >
-            {isTesting ? (
-              <>
-                <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                Testing...
-              </>
-            ) : (
-              "Test Connection"
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleTestConnection}
+              disabled={isTesting}
+              className="border-primary/40 text-primary hover:bg-primary/10 text-xs"
+            >
+              {isTesting ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  Testing...
+                </>
+              ) : (
+                "Test Connection"
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleClear}
+              className="text-muted-foreground hover:text-destructive text-xs"
+              title="Clear stored token"
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1" />
+              Clear
+            </Button>
+          </div>
           <div className="flex gap-2">
             <Button
               type="button"

@@ -38,6 +38,15 @@ function getEnvVariable(viteKey: string, nextKey: string, fallback: string = "")
   return fallback;
 }
 
+export function sanitizeToken(rawToken: string): string {
+  if (!rawToken) return "";
+  return rawToken
+    .trim()
+    .replace(/^Bearer\s+/i, "")
+    .replace(/^["']|["']$/g, "")
+    .trim();
+}
+
 export function getEngineApiUrl(): string {
   if (typeof window !== "undefined" && window.localStorage) {
     const stored = window.localStorage.getItem("NEXUS_ENGINE_API_URL");
@@ -52,20 +61,20 @@ export function getEngineApiUrl(): string {
 export function getEngineToken(): string {
   if (typeof window !== "undefined" && window.localStorage) {
     const stored = window.localStorage.getItem("NEXUS_ENGINE_TOKEN");
-    if (stored && stored.trim() !== "") {
-      return stored.trim();
+    if (stored !== null && stored.trim() !== "") {
+      return sanitizeToken(stored);
     }
   }
-  return (
+  const envVal =
     getEnvVariable("VITE_ENGINE_TOKEN", "NEXT_PUBLIC_ENGINE_TOKEN") ||
-    getEnvVariable("VITE_ENGINE_API_TOKEN", "NEXT_PUBLIC_ENGINE_TOKEN")
-  );
+    getEnvVariable("VITE_ENGINE_API_TOKEN", "NEXT_PUBLIC_ENGINE_TOKEN");
+  return sanitizeToken(envVal);
 }
 
 export function setStoredEngineApiUrl(url: string): void {
   if (typeof window !== "undefined" && window.localStorage) {
-    if (url) {
-      window.localStorage.setItem("NEXUS_ENGINE_API_URL", url);
+    if (url && url.trim() !== "") {
+      window.localStorage.setItem("NEXUS_ENGINE_API_URL", url.trim());
     } else {
       window.localStorage.removeItem("NEXUS_ENGINE_API_URL");
     }
@@ -74,8 +83,9 @@ export function setStoredEngineApiUrl(url: string): void {
 
 export function setStoredEngineToken(token: string): void {
   if (typeof window !== "undefined" && window.localStorage) {
-    if (token) {
-      window.localStorage.setItem("NEXUS_ENGINE_TOKEN", token);
+    const sanitized = sanitizeToken(token);
+    if (sanitized) {
+      window.localStorage.setItem("NEXUS_ENGINE_TOKEN", sanitized);
     } else {
       window.localStorage.removeItem("NEXUS_ENGINE_TOKEN");
     }
@@ -212,7 +222,7 @@ async function engineFetch<T>(path: string, timeoutMs = 12000): Promise<T> {
         );
       }
       throw new EngineApiAuthError(
-        "HTTP 401 Unauthorized: Missing or invalid Bearer token. Please check your Engine Token."
+        "HTTP 401 Unauthorized: Missing or invalid Bearer token. Please verify your Engine API_AUTH_TOKEN."
       );
     }
 
