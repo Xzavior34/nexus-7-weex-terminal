@@ -1,0 +1,176 @@
+import { useState, useEffect, useMemo } from "react";
+import { motion } from "framer-motion";
+import { StatusHeader } from "@/components/dashboard/StatusHeader";
+import { LiveMarketCard } from "@/components/dashboard/LiveMarketCard";
+import { AILogStreamPro } from "@/components/dashboard/AILogStreamPro";
+import { WalletPnLPro } from "@/components/dashboard/WalletPnLPro";
+import { RiskManagerPro } from "@/components/dashboard/RiskManagerPro";
+import { TradingHeartbeat } from "@/components/dashboard/TradingHeartbeat";
+import { AudioControls } from "@/components/dashboard/AudioControls";
+import { useEngineData } from "@/hooks/useEngineData";
+import { useLivePrices } from "@/hooks/useLivePrices";
+import { computeDailyLossUsedPct } from "@/lib/engineApi";
+
+const Index = () => {
+  const [audioEnabled, setAudioEnabled] = useState(true);
+  const [audioVolume, setAudioVolume] = useState(0.5);
+  const [sessionTime, setSessionTime] = useState(0);
+
+  const { status, positions, decisions, equityCurve, logs, isConnected, lastError } =
+    useEngineData({ audioEnabled, audioVolume });
+
+  const symbols = status?.config.pairs ?? ["BTC/USDT", "ETH/USDT"];
+  const livePrices = useLivePrices(symbols);
+
+  const currentPriceMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const [symbol, state] of Object.entries(livePrices)) {
+      map[symbol] = state.currentPrice;
+    }
+    return map;
+  }, [livePrices]);
+
+  const dailyLossUsedPct = useMemo(
+    () => computeDailyLossUsedPct(equityCurve, status?.config.max_daily_loss_pct ?? 0),
+    [equityCurve, status]
+  );
+
+  // Recent decision activity, used to drive the heartbeat's "activity level" —
+  // a real signal instead of the old hardcoded 72.
+  const recentDecisionRate = useMemo(() => {
+    if (decisions.length === 0) return 20;
+    const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+    const recentCount = decisions.filter((d) => new Date(d.ts).getTime() >= fiveMinAgo).length;
+    return Math.min(20 + recentCount * 15, 100);
+  }, [decisions]);
+
+  // Session timer
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSessionTime((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const formatTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
+
+  return (
+    <div className="min-h-screen w-full bg-background">
+      {/* Status Header with Heartbeat */}
+      <StatusHeader isConnected={isConnected} />
+
+      {/* Main Content */}
+      <main className="p-6 max-w-[1800px] mx-auto">
+        {/* Header */}
+        <motion.header
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-foreground tracking-tight font-sans">
+                Nexus-7{" "}
+                <span className="text-primary drop-shadow-[0_0_20px_rgba(0,255,157,0.5)]">
+                  GlassBox
+                </span>{" "}
+                Terminal
+              </h1>
+              <p className="text-sm text-muted-foreground mt-1">
+                Transparent AI trading decisions • Binance Spot Testnet + Gemini
+              </p>
+              {lastError && (
+                <p className="text-xs text-destructive mt-1">Engine connection error: {lastError}</p>
+              )}
+            </div>
+            <div className="flex items-center gap-4">
+              <AudioControls
+                enabled={audioEnabled}
+                volume={audioVolume}
+                onEnabledChange={setAudioEnabled}
+                onVolumeChange={setAudioVolume}
+              />
+              <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 border border-primary/30">
+                <motion.span
+                  animate={{ opacity: [1, 0.3, 1] }}
+                  transition={{ duration: 1.5, repeat: Infinity }}
+                  className="w-2 h-2 rounded-full bg-primary"
+                />
+                <span className="text-sm font-bold text-primary">
+                  {isConnected ? (status?.status ?? "LIVE").toString().toUpperCase() : "CONNECTING"}
+                </span>
+              </div>
+              <div className="text-right px-4 py-2 rounded-xl bg-secondary/50 border border-border/50">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                  Session
+                </p>
+                <p className="text-sm font-bold text-foreground tabular-nums">
+                  {formatTime(sessionTime)}
+                </p>
+              </div>
+            </div>
+          </div>
+        </motion.header>
+
+        {/* Bento Grid Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left Column - Market Cards & Logs */}
+          <div className="lg:col-span-8 space-y-6">
+            {/* Live Market Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {symbols.slice(0, 2).map((symbol) => {
+                const feed = livePrices[symbol];
+                if (!feed) {
+                  return (
+                    <div
+                      key={symbol}
+                      className="p-5 rounded-2xl border border-border/50 bg-card/80 backdrop-blur-md flex items-center justify-center h-[168px] text-xs text-muted-foreground"
+                    >
+                      Loading {symbol} price feed...
+                    </div>
+                  );
+                }
+                return (
+                  <LiveMarketCard
+                    key={symbol}
+                    symbol={symbol}
+                    basePrice={feed.history[0]?.price ?? feed.currentPrice}
+                    isActive={!!positions[symbol]}
+                    liveHistory={feed.history}
+                    liveCurrentPrice={feed.currentPrice}
+                  />
+                );
+              })}
+            </div>
+
+            {/* Trading Heartbeat */}
+            <TradingHeartbeat activityLevel={recentDecisionRate} isConnected={isConnected} />
+
+            {/* AI Logic Stream - The GlassBox Feature */}
+            <div className="h-[400px]">
+              <AILogStreamPro externalLogs={logs} />
+            </div>
+          </div>
+
+          {/* Right Column - Wallet & Risk */}
+          <div className="lg:col-span-4 space-y-6">
+            <WalletPnLPro
+              equityUsd={status?.last_equity_usd ?? null}
+              positions={positions}
+              livePrices={currentPriceMap}
+              isConnected={isConnected}
+            />
+            <RiskManagerPro status={status} dailyLossUsedPct={dailyLossUsedPct} />
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default Index;

@@ -1,0 +1,371 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+/* Nexus-7: GlassBox Trading Terminal Design System
+   Professional Institutional Dark Theme
+*/
+
+@layer base {
+  :root {
+    /* Core Background - Pure Matte Black #0a0a0a */
+    --background: 0 0% 4%;
+    --foreground: 0 0% 95%;
+
+    /* Card Surfaces - Slightly elevated */
+    --card: 0 0% 5%;
+    --card-foreground: 0 0% 95%;
+
+    /* Popover */
+    --popover: 0 0% 6%;
+    --popover-foreground: 0 0% 95%;
+
+    /* Primary - Neon Green #00ff9d */
+    --primary: 157 100% 50%;
+    --primary-foreground: 0 0% 2%;
+
+    /* Secondary - Muted Surface */
+    --secondary: 0 0% 8%;
+    --secondary-foreground: 0 0% 80%;
+
+    /* Muted Elements */
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 50%;
+
+    /* Accent - Subtle Highlight */
+    --accent: 0 0% 10%;
+    --accent-foreground: 0 0% 95%;
+
+    /* Destructive - Risk Red #ff3b30 */
+    --destructive: 4 100% 59%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Borders & Inputs */
+    --border: 0 0% 12%;
+    --input: 0 0% 10%;
+    --ring: 157 100% 50%;
+
+    --radius: 0.75rem;
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 3%;
+    --sidebar-foreground: 0 0% 70%;
+    --sidebar-primary: 157 100% 50%;
+    --sidebar-primary-foreground: 0 0% 2%;
+    --sidebar-accent: 0 0% 8%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 0 0% 10%;
+    --sidebar-ring: 157 100% 50%;
+
+    /* Custom Trading Theme Colors */
+    --profit: 157 100% 50%;
+    --profit-glow: 157 100% 60%;
+    --risk: 4 100% 59%;
+    --risk-glow: 4 100% 65%;
+    --warning: 38 100% 50%;
+    --info: 200 100% 50%;
+    --terminal-green: 157 100% 50%;
+    --terminal-cyan: 187 100% 50%;
+    --terminal-purple: 270 100% 65%;
+    --terminal-yellow: 38 100% 50%;
+  }
+
+  .dark {
+    --background: 0 0% 4%;
+    --foreground: 0 0% 95%;
+    --card: 0 0% 5%;
+    --card-foreground: 0 0% 95%;
+    --popover: 0 0% 6%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 157 100% 50%;
+    --primary-foreground: 0 0% 2%;
+    --secondary: 0 0% 8%;
+    --secondary-foreground: 0 0% 80%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 50%;
+    --accent: 0 0% 10%;
+    --accent-foreground: 0 0% 95%;
+    --destructive: 4 100% 59%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 12%;
+    --input: 0 0% 10%;
+    --ring: 157 100% 50%;
+    --sidebar-background: 0 0% 3%;
+    --sidebar-foreground: 0 0% 70%;
+    --sidebar-primary: 157 100% 50%;
+    --sidebar-primary-foreground: 0 0% 2%;
+    --sidebar-accent: 0 0% 8%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 0 0% 10%;
+    --sidebar-ring: 157 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  /* Glow Effects */
+  .glow-profit {
+    box-shadow: 0 0 20px hsl(var(--profit) / 0.3),
+                0 0 40px hsl(var(--profit) / 0.2),
+                0 0 60px hsl(var(--profit) / 0.1);
+  }
+
+  .glow-profit-intense {
+    box-shadow: 0 0 30px hsl(var(--profit) / 0.5),
+                0 0 60px hsl(var(--profit) / 0.3),
+                0 0 100px hsl(var(--profit) / 0.2);
+  }
+
+  .glow-risk {
+    box-shadow: 0 0 20px hsl(var(--risk) / 0.3),
+                0 0 40px hsl(var(--risk) / 0.2),
+                0 0 60px hsl(var(--risk) / 0.1);
+  }
+
+  .glow-risk-intense {
+    box-shadow: 0 0 30px hsl(var(--risk) / 0.5),
+                0 0 60px hsl(var(--risk) / 0.3),
+                0 0 100px hsl(var(--risk) / 0.2);
+  }
+
+  .text-glow-profit {
+    text-shadow: 0 0 10px hsl(var(--profit) / 0.5),
+                 0 0 20px hsl(var(--profit) / 0.3),
+                 0 0 30px hsl(var(--profit) / 0.2);
+  }
+
+  .text-glow-risk {
+    text-shadow: 0 0 10px hsl(var(--risk) / 0.5),
+                 0 0 20px hsl(var(--risk) / 0.3),
+                 0 0 30px hsl(var(--risk) / 0.2);
+  }
+
+  /* Pulse Animations */
+  .pulse-profit {
+    animation: pulse-profit 2s ease-in-out infinite;
+  }
+
+  .pulse-risk {
+    animation: pulse-risk 2s ease-in-out infinite;
+  }
+
+  .pulse-opportunity {
+    animation: pulse-opportunity 1s ease-in-out infinite;
+  }
+
+  /* Terminal Text */
+  .terminal-text {
+    font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  }
+
+  /* Glass Effect */
+  .glass {
+    background: hsl(0 0% 5% / 0.8);
+    backdrop-filter: blur(10px);
+    border: 1px solid hsl(0 0% 20% / 0.3);
+  }
+
+  /* Gradient Borders */
+  .gradient-border-profit {
+    border: 1px solid transparent;
+    background: linear-gradient(hsl(var(--card)), hsl(var(--card))) padding-box,
+                linear-gradient(135deg, hsl(var(--profit)), transparent) border-box;
+  }
+
+  /* Scrollbar Styling */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+    border-radius: 3px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 3px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+  }
+}
+
+@layer components {
+  /* Keyframe Animations */
+  @keyframes pulse-profit {
+    0%, 100% {
+      box-shadow: 0 0 20px hsl(var(--profit) / 0.3),
+                  0 0 40px hsl(var(--profit) / 0.2);
+    }
+    50% {
+      box-shadow: 0 0 40px hsl(var(--profit) / 0.5),
+                  0 0 80px hsl(var(--profit) / 0.3),
+                  0 0 120px hsl(var(--profit) / 0.2);
+    }
+  }
+
+  @keyframes pulse-risk {
+    0%, 100% {
+      box-shadow: 0 0 20px hsl(var(--risk) / 0.3),
+                  0 0 40px hsl(var(--risk) / 0.2);
+    }
+    50% {
+      box-shadow: 0 0 40px hsl(var(--risk) / 0.5),
+                  0 0 80px hsl(var(--risk) / 0.3),
+                  0 0 120px hsl(var(--risk) / 0.2);
+    }
+  }
+
+  @keyframes pulse-opportunity {
+    0%, 100% {
+      box-shadow: 0 0 30px hsl(var(--profit) / 0.4),
+                  0 0 60px hsl(var(--profit) / 0.3);
+      transform: scale(1);
+    }
+    50% {
+      box-shadow: 0 0 60px hsl(var(--profit) / 0.7),
+                  0 0 120px hsl(var(--profit) / 0.5),
+                  0 0 180px hsl(var(--profit) / 0.3);
+      transform: scale(1.02);
+    }
+  }
+
+  @keyframes glow-line {
+    0% {
+      filter: drop-shadow(0 0 2px hsl(var(--profit)));
+    }
+    50% {
+      filter: drop-shadow(0 0 15px hsl(var(--profit))) 
+              drop-shadow(0 0 30px hsl(var(--profit)));
+    }
+    100% {
+      filter: drop-shadow(0 0 2px hsl(var(--profit)));
+    }
+  }
+
+  @keyframes typewriter {
+    from { width: 0; }
+    to { width: 100%; }
+  }
+
+  @keyframes blink-cursor {
+    0%, 50% { border-color: hsl(var(--profit)); }
+    51%, 100% { border-color: transparent; }
+  }
+
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes scan-line {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100vh); }
+  }
+
+  .animate-glow-line {
+    animation: glow-line 2s ease-in-out infinite;
+  }
+
+  .animate-fade-in-up {
+    animation: fade-in-up 0.5s ease-out forwards;
+  }
+
+  .animate-typewriter {
+    overflow: hidden;
+    white-space: nowrap;
+    animation: typewriter 0.5s steps(40) forwards;
+  }
+
+  .animate-cursor {
+    border-right: 2px solid;
+    animation: blink-cursor 1s step-end infinite;
+  }
+
+  /* Gradient Scan Animation for Charts */
+  @keyframes gradient-scan {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(400%);
+    }
+  }
+
+  .gradient-scan-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 25%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      hsl(var(--profit) / 0.03) 30%,
+      hsl(var(--profit) / 0.08) 50%,
+      hsl(var(--profit) / 0.03) 70%,
+      transparent 100%
+    );
+    animation: gradient-scan 4s ease-in-out infinite;
+  }
+
+  /* Terminal Container Styling */
+  .terminal-container {
+    position: relative;
+    background: linear-gradient(
+      180deg,
+      hsl(0 0% 2%) 0%,
+      hsl(0 0% 3%) 100%
+    );
+  }
+
+  /* CRT Scanlines Effect */
+  .terminal-scanlines {
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 1px,
+      hsl(0 0% 0% / 0.3) 1px,
+      hsl(0 0% 0% / 0.3) 2px
+    );
+  }
+
+  /* Typewriter Line Animation */
+  @keyframes typewriter-line {
+    from {
+      background-color: hsl(var(--profit) / 0.1);
+    }
+    to {
+      background-color: transparent;
+    }
+  }
+
+  .animate-typewriter-line {
+    animation: typewriter-line 1s ease-out forwards;
+  }
+}
