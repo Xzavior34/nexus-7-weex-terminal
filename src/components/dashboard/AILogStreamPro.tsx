@@ -148,17 +148,18 @@ export function AILogStreamPro({ websocketUrl, externalLogs = [] }: AILogStreamP
   // Handle external logs
   useEffect(() => {
     if (externalLogs.length > 0) {
-      externalLogs.forEach(log => {
-        if (!logs.some(l => l.id === log.id)) {
-          setLogs(prev => [...prev.slice(-100), log]);
-        }
+      setLogs((prev) => {
+        const existingIds = new Set(prev.map((l) => l.id));
+        const toAdd = externalLogs.filter((l) => !existingIds.has(l.id));
+        if (toAdd.length === 0) return prev;
+        return [...prev.slice(-150), ...toAdd];
       });
     }
   }, [externalLogs]);
 
-  // Demo mode: Add mock messages
+  // Demo mode: Add mock messages only if no websocket and no real external logs
   useEffect(() => {
-    if (websocketUrl || isPaused) return;
+    if (websocketUrl || isPaused || externalLogs.length > 0) return;
 
     const interval = setInterval(() => {
       const mockMessage = DEMO_MESSAGES[messageIndex % DEMO_MESSAGES.length];
@@ -167,7 +168,7 @@ export function AILogStreamPro({ websocketUrl, externalLogs = [] }: AILogStreamP
     }, 800 + Math.random() * 1000);
 
     return () => clearInterval(interval);
-  }, [isPaused, messageIndex, websocketUrl, addLog]);
+  }, [isPaused, messageIndex, websocketUrl, externalLogs.length, addLog]);
 
   // Auto-scroll
   useEffect(() => {

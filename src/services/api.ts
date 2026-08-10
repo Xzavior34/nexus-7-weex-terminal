@@ -14,11 +14,13 @@
 
 const DEFAULT_ENGINE_API_URL = "https://nexus7-engine.onrender.com";
 
-function getEnvVariable(viteKey: string, nextKey: string, fallback: string = ""): string {
+function getEnvVariable(keys: string[], fallback: string = ""): string {
   try {
     if (typeof import.meta !== "undefined" && import.meta.env) {
-      const val = import.meta.env[viteKey];
-      if (val !== undefined && val !== "") return String(val);
+      for (const k of keys) {
+        const val = import.meta.env[k];
+        if (val !== undefined && val !== "") return String(val);
+      }
     }
   } catch {
     // Ignore
@@ -26,10 +28,10 @@ function getEnvVariable(viteKey: string, nextKey: string, fallback: string = "")
 
   try {
     if (typeof process !== "undefined" && process.env) {
-      const nextVal = process.env[nextKey];
-      if (nextVal !== undefined && nextVal !== "") return String(nextVal);
-      const viteVal = process.env[viteKey];
-      if (viteVal !== undefined && viteVal !== "") return String(viteVal);
+      for (const k of keys) {
+        const val = process.env[k];
+        if (val !== undefined && val !== "") return String(val);
+      }
     }
   } catch {
     // Ignore
@@ -54,7 +56,10 @@ export function getEngineApiUrl(): string {
       return stored.trim().replace(/\/+$/, "");
     }
   }
-  const envUrl = getEnvVariable("VITE_ENGINE_API_URL", "NEXT_PUBLIC_ENGINE_API_URL", DEFAULT_ENGINE_API_URL);
+  const envUrl = getEnvVariable(
+    ["VITE_ENGINE_API_URL", "VITE_API_URL", "NEXT_PUBLIC_ENGINE_API_URL", "NEXT_PUBLIC_API_URL"],
+    DEFAULT_ENGINE_API_URL
+  );
   return (envUrl || DEFAULT_ENGINE_API_URL).replace(/\/+$/, "");
 }
 
@@ -65,9 +70,15 @@ export function getEngineToken(): string {
       return sanitizeToken(stored);
     }
   }
-  const envVal =
-    getEnvVariable("VITE_ENGINE_TOKEN", "NEXT_PUBLIC_ENGINE_TOKEN") ||
-    getEnvVariable("VITE_ENGINE_API_TOKEN", "NEXT_PUBLIC_ENGINE_TOKEN");
+  const envVal = getEnvVariable([
+    "VITE_ENGINE_TOKEN",
+    "VITE_ENGINE_API_TOKEN",
+    "VITE_API_AUTH_TOKEN",
+    "VITE_ENGINE_AUTH_TOKEN",
+    "NEXT_PUBLIC_ENGINE_TOKEN",
+    "NEXT_PUBLIC_ENGINE_API_TOKEN",
+    "NEXT_PUBLIC_API_AUTH_TOKEN",
+  ]);
   return sanitizeToken(envVal);
 }
 
