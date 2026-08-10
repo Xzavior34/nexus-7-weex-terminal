@@ -26,7 +26,7 @@ interface UseEngineDataOptions {
 
 /**
  * Hook to poll the Nexus-7 engine REST API every 3–5 seconds.
- * Authenticates with Bearer token and handles waking state / 401 errors cleanly.
+ * Uses Promise.allSettled so individual endpoint failures don't block the rest of the UI.
  */
 export const useEngineData = (options: UseEngineDataOptions = {}) => {
   const { audioEnabled = true, audioVolume = 0.5, pollIntervalMs = 4000 } = options;
@@ -47,7 +47,7 @@ export const useEngineData = (options: UseEngineDataOptions = {}) => {
   const { playSound } = useAudioFeedback({ enabled: audioEnabled, volume: audioVolume });
 
   const decisionToLog = useCallback((d: EngineDecision): LogEntry => {
-    const time = new Date(d.ts).toLocaleTimeString();
+    const time = d.ts ? new Date(d.ts).toLocaleTimeString() : new Date().toLocaleTimeString();
     if (d.executed) {
       return {
         id: `d-${d.id}`,
@@ -78,57 +78,81 @@ export const useEngineData = (options: UseEngineDataOptions = {}) => {
 
   const poll = useCallback(async () => {
     try {
-      const [statusRes, positionsRes, tradesRes, decisionsRes, equityRes] = await Promise.all([
-        api.getStatus(),
-        api.getPositions(),
-        api.getTrades(30),
-        api.getDecisions(30),
-        api.getEquityCurve(200),
-      ]);
+      const [statusResult, positionsResult, tradesResult, decisionsResult, equityResult] =
+        await Promise.allSettled([
+          api.getStatus(),
+          api.getPositions(),
+          api.getTrades(30),
+          api.getDecisions(30),
+          api.getEquityCurve(200),
+        ]);
 
-      setStatus(statusRes);
-      setPositions(positionsRes);
-      setTrades(tradesRes);
-      setEquityCurve(equityRes);
+      // 1. Check Status Endpoint
+      if (statusResult.status === "fulfilled") {
+        const statusRes = statusResult.value;
+        setStatus(statusRes);
+        if (!isConnected) playSound("success");
+        setIsConnected(true);
+        setIsWakingUp(false);
+        setIsUnauthorized(false);
+        setLastError(null);
+      } else {
+        const reason = statusResult.reason;
+        setIsConnected(false);
+        if (reason instanceof EngineApiAuthError) {
+          setIsUnauthorized(true);
+          setIsWakingUp(false);
+          setLastError(reason.message);
+        } else if (reason instanceof EngineApiWakingUpError) {
+          setIsWakingUp(true);
+          setIsUnauthorized(false);
+          setLastError("Connecting to Engine...");
+        } else {
+          setIsWakingUp(false);
+          setLastError(reason instanceof Error ? reason.message : String(reason));
+        }
+      }
 
-      const newDecisions = decisionsRes.filter((d) => !seenDecisionIds.current.has(d.id));
-      if (newDecisions.length > 0) {
-        newDecisions.forEach((d) => seenDecisionIds.current.add(d.id));
-        const newLogs = newDecisions.map(decisionToLog).reverse();
-        setLogs((prev) => [...prev.slice(-150), ...newLogs]);
-        newLogs.forEach((log) => {
-          if (log.type === "execution") playSound("trade");
-          else if (log.type === "risk") playSound("alert");
+      // 2. Positions
+      if (positionsResult.status === "fulfilled" && positionsResult.value) {
+        setPositions(positionsResult.value);
+      }
+
+      // 3. Trades
+      if (tradesResult.status === "fulfilled" && Array.isArray(tradesResult.value)) {
+        const tradesRes = tradesResult.value;
+        setTrades(tradesRes);
+        tradesRes.forEach((t) => {
+          if (t.status === "closed" && !seenTradeIds.current.has(t.id)) {
+            seenTradeIds.current.add(t.id);
+            if ((t.realized_pnl_usd ?? 0) > 0) playSound("success");
+          }
         });
       }
-      setDecisions(decisionsRes);
 
-      tradesRes.forEach((t) => {
-        if (t.status === "closed" && !seenTradeIds.current.has(t.id)) {
-          seenTradeIds.current.add(t.id);
-          if ((t.realized_pnl_usd ?? 0) > 0) playSound("success");
+      // 4. Decisions & Logs
+      if (decisionsResult.status === "fulfilled" && Array.isArray(decisionsResult.value)) {
+        const decisionsRes = decisionsResult.value;
+        setDecisions(decisionsRes);
+        const newDecisions = decisionsRes.filter((d) => !seenDecisionIds.current.has(d.id));
+        if (newDecisions.length > 0) {
+          newDecisions.forEach((d) => seenDecisionIds.current.add(d.id));
+          const newLogs = newDecisions.map(decisionToLog).reverse();
+          setLogs((prev) => [...prev.slice(-150), ...newLogs]);
+          newLogs.forEach((log) => {
+            if (log.type === "execution") playSound("trade");
+            else if (log.type === "risk") playSound("alert");
+          });
         }
-      });
+      }
 
-      if (!isConnected) playSound("success");
-      setIsConnected(true);
-      setIsWakingUp(false);
-      setIsUnauthorized(false);
-      setLastError(null);
+      // 5. Equity Curve
+      if (equityResult.status === "fulfilled" && Array.isArray(equityResult.value)) {
+        setEquityCurve(equityResult.value);
+      }
     } catch (e: any) {
       setIsConnected(false);
-      if (e instanceof EngineApiAuthError) {
-        setIsUnauthorized(true);
-        setIsWakingUp(false);
-        setLastError(e.message);
-      } else if (e instanceof EngineApiWakingUpError) {
-        setIsWakingUp(true);
-        setIsUnauthorized(false);
-        setLastError("Connecting to Engine...");
-      } else {
-        setIsWakingUp(false);
-        setLastError(e instanceof Error ? e.message : String(e));
-      }
+      setLastError(e instanceof Error ? e.message : String(e));
     }
   }, [decisionToLog, isConnected, playSound]);
 
