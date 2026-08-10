@@ -7,14 +7,18 @@ import { WalletPnLPro } from "@/components/dashboard/WalletPnLPro";
 import { RiskManagerPro } from "@/components/dashboard/RiskManagerPro";
 import { TradingHeartbeat } from "@/components/dashboard/TradingHeartbeat";
 import { AudioControls } from "@/components/dashboard/AudioControls";
+import { ApiConfigModal } from "@/components/dashboard/ApiConfigModal";
 import { useEngineData } from "@/hooks/useEngineData";
 import { useLivePrices } from "@/hooks/useLivePrices";
 import { computeDailyLossUsedPct } from "@/lib/engineApi";
+import { Key, Settings } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 const Index = () => {
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [audioVolume, setAudioVolume] = useState(0.5);
   const [sessionTime, setSessionTime] = useState(0);
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
 
   const {
     status,
@@ -26,6 +30,7 @@ const Index = () => {
     isWakingUp,
     isUnauthorized,
     lastError,
+    refetch,
   } = useEngineData({ audioEnabled, audioVolume });
 
   const symbols = status?.config?.pairs ?? ["BTC/USDT", "ETH/USDT"];
@@ -94,12 +99,23 @@ const Index = () => {
                 Transparent AI trading decisions • Binance Spot Testnet + Gemini
               </p>
               {isUnauthorized ? (
-                <p className="text-xs text-destructive mt-1 font-semibold">
-                  🚨 Authentication Error: Missing or invalid Bearer token. Check VITE_ENGINE_TOKEN in your environment.
-                </p>
+                <div className="flex items-center gap-2 mt-2">
+                  <p className="text-xs text-destructive font-semibold">
+                    🚨 Authentication Error: Missing or invalid Bearer token (HTTP 401).
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIsConfigOpen(true)}
+                    className="h-6 px-2 text-[11px] border-destructive/50 text-destructive hover:bg-destructive/10"
+                  >
+                    <Key className="w-3 h-3 mr-1" />
+                    Configure API Token
+                  </Button>
+                </div>
               ) : isWakingUp ? (
                 <p className="text-xs text-amber-400 mt-1 font-medium animate-pulse">
-                  ⚡ Connecting to Engine... (Render backend waking up from sleep)
+                  ⚡ Connecting to Engine... (Render backend waking up from sleep ~30s)
                 </p>
               ) : lastError ? (
                 <p className="text-xs text-destructive mt-1">Engine connection error: {lastError}</p>
@@ -112,6 +128,15 @@ const Index = () => {
                 onEnabledChange={setAudioEnabled}
                 onVolumeChange={setAudioVolume}
               />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsConfigOpen(true)}
+                className="gap-1.5 border-border/60 hover:bg-secondary/50 text-xs font-medium"
+              >
+                <Settings className="w-3.5 h-3.5 text-primary" />
+                API Settings
+              </Button>
               <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 border border-primary/30">
                 <motion.span
                   animate={{ opacity: [1, 0.3, 1] }}
@@ -128,7 +153,7 @@ const Index = () => {
                   {isConnected
                     ? (status?.status ?? "LIVE").toString().toUpperCase()
                     : isWakingUp
-                    ? "CONNECTING TO ENGINE..."
+                    ? "CONNECTING..."
                     : isUnauthorized
                     ? "UNAUTHORIZED (401)"
                     : "CONNECTING"}
@@ -198,6 +223,13 @@ const Index = () => {
           </div>
         </div>
       </main>
+
+      {/* API Configuration Modal */}
+      <ApiConfigModal
+        open={isConfigOpen}
+        onOpenChange={setIsConfigOpen}
+        onConfigSaved={refetch}
+      />
     </div>
   );
 };

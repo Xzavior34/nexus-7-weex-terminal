@@ -2,13 +2,17 @@
  * Authenticated API Service Layer for Nexus-7 Trading Engine
  *
  * Base URL: https://nexus7-engine.onrender.com
+ *   - Local Storage override: NEXUS_ENGINE_API_URL
  *   - Vite: import.meta.env.VITE_ENGINE_API_URL
  *   - Next.js: process.env.NEXT_PUBLIC_ENGINE_API_URL
  *
  * Engine Token:
+ *   - Local Storage override: NEXUS_ENGINE_TOKEN
  *   - Vite: import.meta.env.VITE_ENGINE_TOKEN (or VITE_ENGINE_API_TOKEN)
  *   - Next.js: process.env.NEXT_PUBLIC_ENGINE_TOKEN
  */
+
+const DEFAULT_ENGINE_API_URL = "https://nexus7-engine.onrender.com";
 
 function getEnvVariable(viteKey: string, nextKey: string, fallback: string = ""): string {
   try {
@@ -17,7 +21,7 @@ function getEnvVariable(viteKey: string, nextKey: string, fallback: string = "")
       if (val !== undefined && val !== "") return String(val);
     }
   } catch {
-    // Ignore error if import.meta is unavailable
+    // Ignore
   }
 
   try {
@@ -28,22 +32,58 @@ function getEnvVariable(viteKey: string, nextKey: string, fallback: string = "")
       if (viteVal !== undefined && viteVal !== "") return String(viteVal);
     }
   } catch {
-    // Ignore error if process.env is unavailable
+    // Ignore
   }
 
   return fallback;
 }
 
-const DEFAULT_ENGINE_API_URL = "https://nexus7-engine.onrender.com";
+export function getEngineApiUrl(): string {
+  if (typeof window !== "undefined" && window.localStorage) {
+    const stored = window.localStorage.getItem("NEXUS_ENGINE_API_URL");
+    if (stored && stored.trim() !== "") {
+      return stored.trim().replace(/\/+$/, "");
+    }
+  }
+  const envUrl = getEnvVariable("VITE_ENGINE_API_URL", "NEXT_PUBLIC_ENGINE_API_URL", DEFAULT_ENGINE_API_URL);
+  return (envUrl || DEFAULT_ENGINE_API_URL).replace(/\/+$/, "");
+}
 
-export const ENGINE_API_URL = (
-  getEnvVariable("VITE_ENGINE_API_URL", "NEXT_PUBLIC_ENGINE_API_URL", DEFAULT_ENGINE_API_URL) ||
-  DEFAULT_ENGINE_API_URL
-).replace(/\/+$/, "");
+export function getEngineToken(): string {
+  if (typeof window !== "undefined" && window.localStorage) {
+    const stored = window.localStorage.getItem("NEXUS_ENGINE_TOKEN");
+    if (stored && stored.trim() !== "") {
+      return stored.trim();
+    }
+  }
+  return (
+    getEnvVariable("VITE_ENGINE_TOKEN", "NEXT_PUBLIC_ENGINE_TOKEN") ||
+    getEnvVariable("VITE_ENGINE_API_TOKEN", "NEXT_PUBLIC_ENGINE_TOKEN")
+  );
+}
 
-export const ENGINE_TOKEN =
-  getEnvVariable("VITE_ENGINE_TOKEN", "NEXT_PUBLIC_ENGINE_TOKEN") ||
-  getEnvVariable("VITE_ENGINE_API_TOKEN", "NEXT_PUBLIC_ENGINE_TOKEN");
+export function setStoredEngineApiUrl(url: string): void {
+  if (typeof window !== "undefined" && window.localStorage) {
+    if (url) {
+      window.localStorage.setItem("NEXUS_ENGINE_API_URL", url);
+    } else {
+      window.localStorage.removeItem("NEXUS_ENGINE_API_URL");
+    }
+  }
+}
+
+export function setStoredEngineToken(token: string): void {
+  if (typeof window !== "undefined" && window.localStorage) {
+    if (token) {
+      window.localStorage.setItem("NEXUS_ENGINE_TOKEN", token);
+    } else {
+      window.localStorage.removeItem("NEXUS_ENGINE_TOKEN");
+    }
+  }
+}
+
+export const ENGINE_API_URL = getEngineApiUrl();
+export const ENGINE_TOKEN = getEngineToken();
 
 export interface EngineStatusConfig {
   testnet?: boolean;
@@ -148,13 +188,16 @@ async function engineFetch<T>(path: string, timeoutMs = 12000): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
+  const baseUrl = getEngineApiUrl();
+  const token = getEngineToken();
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    "Authorization": `Bearer ${ENGINE_TOKEN || ""}`,
+    "Authorization": `Bearer ${token || ""}`,
   };
 
   try {
-    const res = await fetch(`${ENGINE_API_URL}${path}`, {
+    const res = await fetch(`${baseUrl}${path}`, {
       headers,
       signal: controller.signal,
     });
@@ -165,11 +208,11 @@ async function engineFetch<T>(path: string, timeoutMs = 12000): Promise<T> {
         hasAlerted401 = true;
         console.error(
           "🚨 [Nexus-7 API] HTTP 401 Unauthorized: Missing or invalid Bearer token.\n" +
-          "Please configure VITE_ENGINE_TOKEN or NEXT_PUBLIC_ENGINE_TOKEN in your environment variables."
+          "Please configure VITE_ENGINE_TOKEN in your environment or via the terminal Settings modal."
         );
       }
       throw new EngineApiAuthError(
-        "HTTP 401 Unauthorized: Missing or invalid Bearer token. Please check VITE_ENGINE_TOKEN."
+        "HTTP 401 Unauthorized: Missing or invalid Bearer token. Please check your Engine Token."
       );
     }
 
@@ -187,6 +230,8 @@ async function engineFetch<T>(path: string, timeoutMs = 12000): Promise<T> {
       );
     }
 
+    // Reset 401 alert flag on successful request
+    hasAlerted401 = false;
     return (await res.json()) as T;
   } catch (error: any) {
     clearTimeout(timer);
