@@ -81,7 +81,7 @@ export function AILogStream({ externalLogs = [] }: AILogStreamProps) {
     const interval = setInterval(() => {
       const mockMessage = MOCK_MESSAGES[messageIndex % MOCK_MESSAGES.length];
       const newLog: LogEntry = {
-        id: crypto.randomUUID(),
+        id: typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `log-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
         ...mockMessage,
       };

@@ -138,7 +138,7 @@ export function AILogStreamPro({ websocketUrl, externalLogs = [] }: AILogStreamP
 
   const addLog = useCallback((entry: Omit<LogEntry, "id" | "timestamp">) => {
     const newLog: LogEntry = {
-      id: crypto.randomUUID(),
+      id: typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `log-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
       ...entry,
     };
