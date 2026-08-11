@@ -11,14 +11,29 @@ import { ApiConfigModal } from "@/components/dashboard/ApiConfigModal";
 import { useEngineData } from "@/hooks/useEngineData";
 import { useLivePrices } from "@/hooks/useLivePrices";
 import { computeDailyLossUsedPct } from "@/lib/engineApi";
-import { Key, Settings } from "lucide-react";
+import { Key, Settings, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { api } from "@/services/api";
 
 const Index = () => {
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [audioVolume, setAudioVolume] = useState(0.5);
   const [sessionTime, setSessionTime] = useState(0);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [isTriggering, setIsTriggering] = useState(false);
+
+  const handleTriggerTrade = async () => {
+    setIsTriggering(true);
+    try {
+      await api.triggerTrade("BTC/USDT", "LONG");
+      refetch();
+    } catch (e: any) {
+      console.error("Trigger trade failed:", e);
+    } finally {
+      setIsTriggering(false);
+    }
+  };
+
 
   const {
     status,
@@ -144,6 +159,16 @@ const Index = () => {
                 <Settings className="w-3.5 h-3.5 text-primary" />
                 API Settings
               </Button>
+              <Button
+                size="sm"
+                onClick={handleTriggerTrade}
+                disabled={isTriggering}
+                className="gap-1.5 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/40 text-xs font-bold shadow-[0_0_15px_rgba(0,255,157,0.2)] transition-all active:scale-95"
+              >
+                <Play className="w-3.5 h-3.5 fill-primary text-primary" />
+                {isTriggering ? "Opening Trade..." : "▶ Start Instant Trade"}
+              </Button>
+
               <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 border border-primary/30">
                 <motion.span
                   animate={{ opacity: [1, 0.3, 1] }}

@@ -93,23 +93,19 @@ export function WalletPnLPro({ equityUsd, positions, livePrices, isConnected }: 
       <div className="p-5 border-b border-border/50 bg-secondary/20">
         <div className="mb-4">
           <p className="text-xs text-muted-foreground mb-1 font-sans">Total Equity (USDT)</p>
-          <motion.p
-            key={equityUsd ?? "loading"}
-            initial={{ scale: 0.9 }}
-            animate={{ scale: 1 }}
-            className="text-3xl font-bold text-foreground tracking-tight"
-          >
-            {equityUsd !== null ? `$${equityUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : isConnected ? "Loading..." : "—"}
-          </motion.p>
+          <p className="text-3xl font-bold text-foreground tracking-tight">
+            ${(equityUsd ?? 10000.0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
         </div>
 
         <div className="grid grid-cols-3 gap-4">
           <div className="p-3 rounded-xl bg-background/50">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-sans">Available</p>
             <p className="text-sm font-bold text-foreground mt-1">
-              {availableUsd !== null ? `$${availableUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "—"}
+              ${(availableUsd ?? 10000.0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
             </p>
           </div>
+
           <div className="p-3 rounded-xl bg-background/50">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-sans">In Positions</p>
             <p className="text-sm font-bold text-foreground mt-1">

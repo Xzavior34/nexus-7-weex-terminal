@@ -303,4 +303,10 @@ export const api = {
   trades: (limit = 50) => engineFetch<EngineTrade[]>(`/api/trades?limit=${limit}`),
   decisions: (limit = 50) => engineFetch<EngineDecision[]>(`/api/decisions?limit=${limit}`),
   equityCurve: (limit = 500) => engineFetch<EquityPoint[]>(`/api/equity-curve?limit=${limit}`),
+  triggerTrade: (symbol = "BTC/USDT", side = "LONG") =>
+    engineFetch<{ status: string; message: string; position: any }>(
+      `/api/engine/trigger-trade?symbol=${encodeURIComponent(symbol)}&side=${side}`,
+      { method: "POST" }
+    ),
 };
+
