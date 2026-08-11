@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { Wallet, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Wallet, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Zap } from "lucide-react";
 import { EnginePosition } from "@/lib/engineApi";
 
 export interface DisplayPosition {
@@ -26,7 +26,7 @@ function toDisplayPositions(
   if (!positions || typeof positions !== "object") return [];
   const prices = livePrices || {};
   return Object.values(positions)
-    .filter((p): p is EnginePosition => !!p && typeof p === "object")
+    .filter((p): p is EnginePosition => !!p && typeof p === "object" && !!p.symbol && p.symbol.toUpperCase() !== "UNKNOWN")
     .map((p) => {
       const entryPrice = p.entry_price ?? 0;
       const quantity = p.quantity ?? 0;
@@ -34,7 +34,7 @@ function toDisplayPositions(
       const pnl = (currentPrice - entryPrice) * quantity;
       const pnlPercent = entryPrice && quantity ? (pnl / (entryPrice * quantity)) * 100 : 0;
       return {
-        symbol: p.symbol || "UNKNOWN",
+        symbol: p.symbol,
         size: quantity,
         entryPrice,
         currentPrice,
@@ -132,13 +132,32 @@ export function WalletPnLPro({ equityUsd, positions, livePrices, isConnected }: 
 
       {/* Open Positions */}
       <div className="p-5">
-        <p className="text-xs text-muted-foreground mb-4 font-sans">
-          Open Positions ({displayPositions.length})
-        </p>
-        {displayPositions.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-6">
-            {isConnected ? "No open positions right now." : "Waiting for connection to engine..."}
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-xs text-muted-foreground font-sans">
+            Open Positions ({displayPositions.length})
           </p>
+          {displayPositions.length === 0 && isConnected && (
+            <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-[10px] font-medium text-primary">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              Scanning Setups
+            </span>
+          )}
+        </div>
+
+        {displayPositions.length === 0 ? (
+          <div className="flex flex-col items-center justify-center p-6 rounded-xl border border-dashed border-border/60 bg-secondary/10 text-center space-y-2">
+            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+              <Zap className="w-4 h-4" />
+            </div>
+            <p className="text-xs font-bold text-foreground font-sans">
+              0 Active Positions
+            </p>
+            <p className="text-[11px] text-muted-foreground max-w-[260px] leading-relaxed">
+              {isConnected
+                ? "Engine is monitoring market signals. Orders will trigger automatically when high-probability setups execute."
+                : "Connecting to trading engine feed..."}
+            </p>
+          </div>
         ) : (
           <div className="space-y-3">
             {displayPositions.map((position, index) => {
