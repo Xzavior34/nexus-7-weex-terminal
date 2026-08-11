@@ -76,6 +76,8 @@ export const useEngineData = (options: UseEngineDataOptions = {}) => {
     };
   }, []);
 
+  const consecutiveFailuresRef = useRef<number>(0);
+
   const poll = useCallback(async () => {
     try {
       const [statusResult, positionsResult, tradesResult, decisionsResult, equityResult] =
@@ -91,25 +93,31 @@ export const useEngineData = (options: UseEngineDataOptions = {}) => {
       if (statusResult.status === "fulfilled") {
         const statusRes = statusResult.value;
         setStatus(statusRes);
+        consecutiveFailuresRef.current = 0;
         if (!isConnected) playSound("success");
         setIsConnected(true);
         setIsWakingUp(false);
         setIsUnauthorized(false);
         setLastError(null);
       } else {
+        consecutiveFailuresRef.current += 1;
         const reason = statusResult.reason;
-        setIsConnected(false);
-        if (reason instanceof EngineApiAuthError) {
-          setIsUnauthorized(true);
-          setIsWakingUp(false);
-          setLastError(reason.message);
-        } else if (reason instanceof EngineApiWakingUpError) {
-          setIsWakingUp(true);
-          setIsUnauthorized(false);
-          setLastError("Connecting to Engine...");
-        } else {
-          setIsWakingUp(false);
-          setLastError(reason instanceof Error ? reason.message : String(reason));
+        
+        // Only mark disconnected if 3 consecutive polls fail to prevent UI flickering
+        if (consecutiveFailuresRef.current >= 3) {
+          setIsConnected(false);
+          if (reason instanceof EngineApiAuthError) {
+            setIsUnauthorized(true);
+            setIsWakingUp(false);
+            setLastError(reason.message);
+          } else if (reason instanceof EngineApiWakingUpError) {
+            setIsWakingUp(true);
+            setIsUnauthorized(false);
+            setLastError("Connecting to Engine...");
+          } else {
+            setIsWakingUp(false);
+            setLastError(reason instanceof Error ? reason.message : String(reason));
+          }
         }
       }
 
@@ -151,10 +159,14 @@ export const useEngineData = (options: UseEngineDataOptions = {}) => {
         setEquityCurve(equityResult.value);
       }
     } catch (e: any) {
-      setIsConnected(false);
-      setLastError(e instanceof Error ? e.message : String(e));
+      consecutiveFailuresRef.current += 1;
+      if (consecutiveFailuresRef.current >= 3) {
+        setIsConnected(false);
+        setLastError(e instanceof Error ? e.message : String(e));
+      }
     }
   }, [decisionToLog, isConnected, playSound]);
+
 
   useEffect(() => {
     poll();
