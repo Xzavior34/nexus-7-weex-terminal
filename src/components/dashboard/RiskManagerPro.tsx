@@ -132,8 +132,9 @@ export function RiskManagerPro({ status, dailyLossUsedPct }: RiskManagerProProps
             </span>
           </div>
           <p className="text-xs text-muted-foreground ml-4">
-            {status ? `Testnet: ${status.config.testnet ? "yes" : "NO — LIVE"} · Trading enabled: ${status.config.trading_enabled ? "yes" : "no"}` : "Waiting for engine connection..."}
+            {status?.config ? `Testnet: ${status.config.testnet ? "yes" : "NO — LIVE"} · Trading enabled: ${status.config.trading_enabled ? "yes" : "no"}` : "Waiting for engine connection..."}
           </p>
+
         </motion.div>
       </div>
     </motion.div>

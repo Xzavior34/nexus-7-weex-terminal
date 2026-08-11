@@ -240,11 +240,11 @@ export function LiveMarketCard({
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data}>
             <defs>
-              <linearGradient id={`sparkline-gradient-${symbol}`} x1="0" y1="0" x2="1" y2="0">
+              <linearGradient id={`sparkline-gradient-${symbol.replace('/', '-')}`} x1="0" y1="0" x2="1" y2="0">
                 <stop offset="0%" stopColor={isPositive ? "hsl(157, 100%, 50%)" : "hsl(4, 100%, 59%)"} stopOpacity={0.2} />
                 <stop offset="100%" stopColor={isPositive ? "hsl(157, 100%, 50%)" : "hsl(4, 100%, 59%)"} stopOpacity={1} />
               </linearGradient>
-              <filter id={`sparkline-glow-${symbol}`}>
+              <filter id={`sparkline-glow-${symbol.replace('/', '-')}`}>
                 <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
                 <feMerge>
                   <feMergeNode in="coloredBlur"/>
@@ -256,11 +256,12 @@ export function LiveMarketCard({
             <Line
               type="monotone"
               dataKey="price"
-              stroke={`url(#sparkline-gradient-${symbol})`}
+              stroke={`url(#sparkline-gradient-${symbol.replace('/', '-')})`}
               strokeWidth={2}
               dot={false}
-              filter={`url(#sparkline-glow-${symbol})`}
+              filter={`url(#sparkline-glow-${symbol.replace('/', '-')})`}
             />
+
           </LineChart>
         </ResponsiveContainer>
       </div>
