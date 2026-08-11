@@ -96,19 +96,19 @@ export function StatusHeader({ isConnected = true }: StatusHeaderProps) {
   }, []);
 
   return (
-    <div className="relative border-b border-border/50 bg-background/80 backdrop-blur-md">
+    <div className="relative border-b border-border/50 bg-background/80 backdrop-blur-md font-sans">
       {/* Main Status Bar */}
-      <div className="flex items-center justify-between px-6 py-3">
-        <div className="flex items-center gap-8">
+      <div className="flex flex-wrap items-center justify-between px-3 py-2 sm:px-6 sm:py-3 gap-2 sm:gap-4">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-8 text-xs">
           {/* WEEX API Status */}
           <motion.div 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="flex items-center gap-2"
+            className="flex items-center gap-1.5"
           >
-            <Wifi className="w-3.5 h-3.5 text-primary" />
-            <span className="text-xs text-muted-foreground font-sans">WEEX API:</span>
-            <div className="flex items-center gap-1.5">
+            <Wifi className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-primary" />
+            <span className="text-[11px] sm:text-xs text-muted-foreground">API:</span>
+            <div className="flex items-center gap-1">
               <motion.span
                 animate={{ 
                   boxShadow: ['0 0 4px rgba(0,255,157,0.5)', '0 0 8px rgba(0,255,157,0.8)', '0 0 4px rgba(0,255,157,0.5)']
@@ -119,8 +119,8 @@ export function StatusHeader({ isConnected = true }: StatusHeaderProps) {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
               </motion.span>
-              <span className="text-xs font-medium text-primary">
-                Connected ({apiLatency}ms)
+              <span className="text-[11px] sm:text-xs font-medium text-primary">
+                {apiLatency}ms
               </span>
             </div>
           </motion.div>
@@ -130,11 +130,11 @@ export function StatusHeader({ isConnected = true }: StatusHeaderProps) {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.1 }}
-            className="flex items-center gap-2"
+            className="flex items-center gap-1.5"
           >
-            <Brain className="w-3.5 h-3.5 text-terminal-purple" />
-            <span className="text-xs text-muted-foreground font-sans">AI Engine:</span>
-            <span className="text-xs font-bold text-terminal-purple uppercase tracking-wide">ONLINE</span>
+            <Brain className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-terminal-purple" />
+            <span className="text-[11px] sm:text-xs text-muted-foreground">AI:</span>
+            <span className="text-[11px] sm:text-xs font-bold text-terminal-purple uppercase tracking-wide">ONLINE</span>
           </motion.div>
 
           {/* Risk Guard Status */}
@@ -142,40 +142,39 @@ export function StatusHeader({ isConnected = true }: StatusHeaderProps) {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2 }}
-            className="flex items-center gap-2"
+            className="flex items-center gap-1.5"
           >
-            <Shield className="w-3.5 h-3.5 text-warning" />
-            <span className="text-xs text-muted-foreground font-sans">Risk Guard:</span>
-            <span className="text-xs font-bold text-warning uppercase tracking-wide">ACTIVE</span>
+            <Shield className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-warning" />
+            <span className="text-[11px] sm:text-xs text-muted-foreground">Risk:</span>
+            <span className="text-[11px] sm:text-xs font-bold text-warning uppercase tracking-wide">ACTIVE</span>
           </motion.div>
         </div>
 
         <motion.div 
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
-          className="flex items-center gap-3"
+          className="flex items-center gap-2 sm:gap-3"
         >
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-primary/10 border border-primary/20">
-            <Activity className="w-3 h-3 text-primary" />
-            <span className="text-[10px] font-medium text-primary uppercase">System Healthy</span>
+          <div className="flex items-center gap-1 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md bg-primary/10 border border-primary/20">
+            <Activity className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-primary" />
+            <span className="text-[9px] sm:text-[10px] font-medium text-primary uppercase">Healthy</span>
           </div>
-          <span className="text-xs text-muted-foreground font-mono">
+          <span className="text-[10px] sm:text-xs text-muted-foreground font-mono">
             Nexus-7 v2.1.0
           </span>
         </motion.div>
       </div>
 
       {/* Animated Heartbeat Line */}
-      <div className="relative h-4 overflow-hidden">
+      <div className="relative h-3 sm:h-4 overflow-hidden">
         <canvas
           ref={canvasRef}
           width={1200}
           height={16}
           className="w-full h-full opacity-60"
         />
-        {/* Fade edges */}
-        <div className="absolute inset-y-0 left-0 w-20 bg-gradient-to-r from-background to-transparent pointer-events-none" />
-        <div className="absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-background to-transparent pointer-events-none" />
+        <div className="absolute inset-y-0 left-0 w-12 sm:w-20 bg-gradient-to-r from-background to-transparent pointer-events-none" />
+        <div className="absolute inset-y-0 right-0 w-12 sm:w-20 bg-gradient-to-l from-background to-transparent pointer-events-none" />
       </div>
     </div>
   );

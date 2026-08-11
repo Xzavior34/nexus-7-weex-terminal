@@ -279,10 +279,10 @@ export function AILogStreamPro({ websocketUrl, externalLogs = [] }: AILogStreamP
                     isLatest && "bg-primary/5"
                   )}
                 >
-                  <span className="text-[11px] text-primary/40 shrink-0 tabular-nums">
+                  <span className="text-[10px] sm:text-[11px] text-primary/40 shrink-0 tabular-nums">
                     {log.timestamp}
                   </span>
-                  <span className={cn("text-[11px] font-bold shrink-0", style.color, isLatest && style.glow)}>
+                  <span className={cn("text-[10px] sm:text-[11px] font-bold shrink-0", style.color, isLatest && style.glow)}>
                     {style.prefix}
                   </span>
                   <TypewriterText
@@ -352,7 +352,7 @@ function TypewriterText({
   return (
     <span
       className={cn(
-        "text-[11px] text-foreground/90",
+        "text-[10px] sm:text-[11px] text-foreground/90 break-words leading-tight",
         isExecution && "text-primary font-medium drop-shadow-[0_0_10px_rgba(0,255,157,0.5)]"
       )}
     >

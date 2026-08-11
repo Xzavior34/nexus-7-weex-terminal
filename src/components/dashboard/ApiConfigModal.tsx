@@ -70,7 +70,6 @@ export function ApiConfigModal({ open, onOpenChange, onConfigSaved }: ApiConfigM
     const cleanToken = sanitizeToken(token);
 
     try {
-      // Temporarily store credentials for testing
       setStoredEngineApiUrl(cleanUrl);
       setStoredEngineToken(cleanToken);
       setToken(cleanToken);
@@ -97,10 +96,10 @@ export function ApiConfigModal({ open, onOpenChange, onConfigSaved }: ApiConfigM
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] bg-card border-border/80 text-foreground backdrop-blur-xl">
+      <DialogContent className="max-w-[95vw] sm:max-w-[500px] p-4 sm:p-6 bg-card border-border/80 text-foreground backdrop-blur-xl rounded-2xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl font-bold font-sans">
-            <Key className="w-5 h-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl font-bold font-sans">
+            <Key className="w-5 h-5 text-primary shrink-0" />
             Nexus-7 Engine API Configuration
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
@@ -110,7 +109,7 @@ export function ApiConfigModal({ open, onOpenChange, onConfigSaved }: ApiConfigM
 
         <div className="space-y-4 py-2">
           {/* API URL */}
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label htmlFor="apiUrl" className="text-xs font-semibold flex items-center gap-1.5">
               <Server className="w-3.5 h-3.5 text-primary" />
               Engine API Base URL
@@ -120,7 +119,7 @@ export function ApiConfigModal({ open, onOpenChange, onConfigSaved }: ApiConfigM
               value={apiUrl}
               onChange={(e) => setApiUrl(e.target.value)}
               placeholder="https://nexus7-engine.onrender.com"
-              className="bg-background/50 border-border/60 text-xs font-mono"
+              className="bg-background/50 border-border/60 text-xs font-mono h-9"
             />
             <p className="text-[10px] text-muted-foreground">
               Default: <code className="text-primary">https://nexus7-engine.onrender.com</code>
@@ -128,7 +127,7 @@ export function ApiConfigModal({ open, onOpenChange, onConfigSaved }: ApiConfigM
           </div>
 
           {/* Bearer Token */}
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label htmlFor="token" className="text-xs font-semibold flex items-center gap-1.5">
               <Key className="w-3.5 h-3.5 text-amber-400" />
               Engine Bearer Token (<code className="text-xs font-mono">API_AUTH_TOKEN</code>)
@@ -139,10 +138,10 @@ export function ApiConfigModal({ open, onOpenChange, onConfigSaved }: ApiConfigM
               value={token}
               onChange={(e) => setToken(e.target.value)}
               placeholder="Paste your API_AUTH_TOKEN here..."
-              className="bg-background/50 border-border/60 text-xs font-mono"
+              className="bg-background/50 border-border/60 text-xs font-mono h-9"
             />
             <p className="text-[10px] text-muted-foreground leading-relaxed">
-              ⚠️ Must match the <code className="text-amber-400">API_AUTH_TOKEN</code> environment variable configured on your Render dashboard (<code className="text-xs font-mono">nexus7-engine</code>).
+              ⚠️ Must match the <code className="text-amber-400">API_AUTH_TOKEN</code> environment variable configured on your Render dashboard.
             </p>
           </div>
 
@@ -160,12 +159,12 @@ export function ApiConfigModal({ open, onOpenChange, onConfigSaved }: ApiConfigM
               ) : (
                 <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
               )}
-              <div>{testResult.message}</div>
+              <div className="break-words">{testResult.message}</div>
             </div>
           )}
         </div>
 
-        <DialogFooter className="flex items-center justify-between gap-2 sm:justify-between">
+        <DialogFooter className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2">
           <div className="flex gap-2">
             <Button
               type="button"
@@ -173,7 +172,7 @@ export function ApiConfigModal({ open, onOpenChange, onConfigSaved }: ApiConfigM
               size="sm"
               onClick={handleTestConnection}
               disabled={isTesting}
-              className="border-primary/40 text-primary hover:bg-primary/10 text-xs"
+              className="flex-1 sm:flex-initial border-primary/40 text-primary hover:bg-primary/10 text-xs h-9"
             >
               {isTesting ? (
                 <>
@@ -189,20 +188,20 @@ export function ApiConfigModal({ open, onOpenChange, onConfigSaved }: ApiConfigM
               variant="ghost"
               size="sm"
               onClick={handleClear}
-              className="text-muted-foreground hover:text-destructive text-xs"
+              className="text-muted-foreground hover:text-destructive text-xs h-9"
               title="Clear stored token"
             >
               <Trash2 className="w-3.5 h-3.5 mr-1" />
               Clear
             </Button>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 justify-end">
             <Button
               type="button"
               variant="ghost"
               size="sm"
               onClick={() => onOpenChange(false)}
-              className="text-xs"
+              className="text-xs h-9"
             >
               Cancel
             </Button>
@@ -210,7 +209,7 @@ export function ApiConfigModal({ open, onOpenChange, onConfigSaved }: ApiConfigM
               type="button"
               size="sm"
               onClick={handleSave}
-              className="bg-primary text-black font-semibold hover:bg-primary/90 text-xs"
+              className="bg-primary text-black font-semibold hover:bg-primary/90 text-xs h-9"
             >
               Save Configuration
             </Button>
