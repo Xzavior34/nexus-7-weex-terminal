@@ -15,8 +15,6 @@ interface LiveMarketCardProps {
   volatility?: number;
   isActive?: boolean;
   priceUpdate?: number | null;
-  /** Real price history from useLivePrices. When provided, this replaces
-   * the internal random-walk simulation entirely — see hooks/useLivePrices.ts. */
   liveHistory?: PricePoint[];
   liveCurrentPrice?: number;
 }
@@ -33,18 +31,18 @@ export function LiveMarketCard({
   const isLive = liveCurrentPrice !== undefined && liveHistory !== undefined;
 
   const [data, setData] = useState<PricePoint[]>([]);
-  const [currentPrice, setCurrentPrice] = useState(basePrice);
-  const [prevPrice, setPrevPrice] = useState(basePrice);
+  const [currentPrice, setCurrentPrice] = useState(basePrice || 0);
+  const [prevPrice, setPrevPrice] = useState(basePrice || 0);
   const [priceChange, setPriceChange] = useState(0);
 
   // Generate initial sparkline data — only when no real feed is supplied.
   useEffect(() => {
     if (isLive) return;
     const initialData: PricePoint[] = [];
-    let price = basePrice;
+    let price = basePrice || 100;
 
     for (let i = 30; i >= 0; i--) {
-      const change = (Math.random() - 0.5) * basePrice * volatility * 2;
+      const change = (Math.random() - 0.5) * price * volatility * 2;
       price += change;
       initialData.push({
         price: Number(price.toFixed(2)),
@@ -58,9 +56,6 @@ export function LiveMarketCard({
 
   const prevLivePriceRef = useRef<number | undefined>(undefined);
 
-  // Real price feed path: mirror liveHistory/liveCurrentPrice into local
-  // state so the rest of the component (which was built around local state)
-  // doesn't need to change.
   useEffect(() => {
     if (!isLive || liveCurrentPrice === undefined) return;
     setPrevPrice(prevLivePriceRef.current ?? liveCurrentPrice);
@@ -68,37 +63,32 @@ export function LiveMarketCard({
     setCurrentPrice(liveCurrentPrice);
     setPriceChange(basePrice ? ((liveCurrentPrice - basePrice) / basePrice) * 100 : 0);
     setData(liveHistory ?? []);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLive, liveCurrentPrice, liveHistory]);
+  }, [isLive, liveCurrentPrice, liveHistory, basePrice]);
 
-  // Handle external one-off price updates (unused in the real-feed path,
-  // kept for the demo/fallback path).
   useEffect(() => {
     if (isLive) return;
     if (priceUpdate !== null && priceUpdate !== undefined) {
       setPrevPrice(currentPrice);
       setCurrentPrice(priceUpdate);
-      setPriceChange(((priceUpdate - basePrice) / basePrice) * 100);
+      setPriceChange(basePrice ? ((priceUpdate - basePrice) / basePrice) * 100 : 0);
       setData((prev) => [
         ...prev.slice(1),
         { price: priceUpdate, time: Date.now() },
       ]);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [priceUpdate, isLive]);
+  }, [priceUpdate, isLive, currentPrice, basePrice]);
 
-  // Simulated demo updates — disabled entirely once a real feed is supplied.
   useEffect(() => {
     if (isLive) return;
     const interval = setInterval(() => {
       setData((prev) => {
-        const lastPrice = prev[prev.length - 1]?.price || basePrice;
-        const change = (Math.random() - 0.5) * basePrice * volatility * 2;
+        const lastPrice = prev[prev.length - 1]?.price || basePrice || 100;
+        const change = (Math.random() - 0.5) * (basePrice || 100) * volatility * 2;
         const newPrice = lastPrice + change;
 
         setPrevPrice(currentPrice);
         setCurrentPrice(newPrice);
-        setPriceChange(((newPrice - basePrice) / basePrice) * 100);
+        setPriceChange(basePrice ? ((newPrice - basePrice) / basePrice) * 100 : 0);
 
         return [
           ...prev.slice(1),
@@ -113,12 +103,26 @@ export function LiveMarketCard({
   const isPositive = priceChange >= 0;
   const priceDirection = currentPrice > prevPrice ? "up" : currentPrice < prevPrice ? "down" : "none";
   
-  const { minPrice, maxPrice } = useMemo(() => ({
-    minPrice: Math.min(...data.map(d => d.price)),
-    maxPrice: Math.max(...data.map(d => d.price)),
-  }), [data]);
+  const { minPrice, maxPrice } = useMemo(() => {
+    if (!data || data.length === 0) {
+      const fallback = basePrice || currentPrice || 1;
+      return { minPrice: fallback * 0.99, maxPrice: fallback * 1.01 };
+    }
+    const validPrices = data.map((d) => d.price).filter((p) => typeof p === "number" && !isNaN(p) && isFinite(p));
+    if (validPrices.length === 0) {
+      const fallback = basePrice || currentPrice || 1;
+      return { minPrice: fallback * 0.99, maxPrice: fallback * 1.01 };
+    }
+    const min = Math.min(...validPrices);
+    const max = Math.max(...validPrices);
+    return {
+      minPrice: min === max ? min * 0.99 : min,
+      maxPrice: min === max ? max * 1.01 : max,
+    };
+  }, [data, basePrice, currentPrice]);
 
   const formatPrice = (price: number) => {
+    if (!price || isNaN(price) || !isFinite(price)) return "0.00";
     if (price >= 1000) {
       return price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
@@ -131,7 +135,7 @@ export function LiveMarketCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
       className={cn(
-        "relative p-5 rounded-2xl border transition-all duration-500 overflow-hidden",
+        "relative p-5 rounded-2xl border transition-all duration-500 overflow-hidden font-sans",
         "bg-card/80 backdrop-blur-md",
         isActive 
           ? "border-primary/50 shadow-[0_0_40px_rgba(0,255,157,0.15)]" 
@@ -163,7 +167,7 @@ export function LiveMarketCard({
               isPositive ? "bg-primary/20 text-primary" : "bg-destructive/20 text-destructive"
             )}
           >
-            {symbol.split('/')[0]}
+            {(symbol || "").split('/')[0]}
           </motion.div>
           <div>
             <h3 className="font-bold text-lg text-foreground font-sans">{symbol}</h3>
@@ -240,11 +244,11 @@ export function LiveMarketCard({
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data}>
             <defs>
-              <linearGradient id={`sparkline-gradient-${symbol.replace('/', '-')}`} x1="0" y1="0" x2="1" y2="0">
+              <linearGradient id={`sparkline-gradient-${(symbol || "").replace('/', '-')}`} x1="0" y1="0" x2="1" y2="0">
                 <stop offset="0%" stopColor={isPositive ? "hsl(157, 100%, 50%)" : "hsl(4, 100%, 59%)"} stopOpacity={0.2} />
                 <stop offset="100%" stopColor={isPositive ? "hsl(157, 100%, 50%)" : "hsl(4, 100%, 59%)"} stopOpacity={1} />
               </linearGradient>
-              <filter id={`sparkline-glow-${symbol.replace('/', '-')}`}>
+              <filter id={`sparkline-glow-${(symbol || "").replace('/', '-')}`}>
                 <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
                 <feMerge>
                   <feMergeNode in="coloredBlur"/>
@@ -256,12 +260,11 @@ export function LiveMarketCard({
             <Line
               type="monotone"
               dataKey="price"
-              stroke={`url(#sparkline-gradient-${symbol.replace('/', '-')})`}
+              stroke={`url(#sparkline-gradient-${(symbol || "").replace('/', '-')})`}
               strokeWidth={2}
               dot={false}
-              filter={`url(#sparkline-glow-${symbol.replace('/', '-')})`}
+              filter={`url(#sparkline-glow-${(symbol || "").replace('/', '-')})`}
             />
-
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -276,11 +279,11 @@ export function LiveMarketCard({
         </div>
         <div className="text-xs text-muted-foreground">
           <span className="text-foreground font-medium">
-            ${(isLive && data.length ? maxPrice : basePrice * 1.02).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            ${(isLive && data.length ? maxPrice : (basePrice || 100) * 1.02).toLocaleString(undefined, { maximumFractionDigits: 2 })}
           </span>
           <span className="mx-1">/</span>
           <span className="text-foreground font-medium">
-            ${(isLive && data.length ? minPrice : basePrice * 0.98).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            ${(isLive && data.length ? minPrice : (basePrice || 100) * 0.98).toLocaleString(undefined, { maximumFractionDigits: 2 })}
           </span>
           <span className="ml-1 text-muted-foreground">{isLive ? "session H/L" : "H/L"}</span>
         </div>

@@ -14,35 +14,41 @@ export interface DisplayPosition {
 
 interface WalletPnLProProps {
   equityUsd: number | null;
-  positions: Record<string, EnginePosition>;
-  livePrices: Record<string, number>;
+  positions?: Record<string, EnginePosition> | null;
+  livePrices?: Record<string, number> | null;
   isConnected: boolean;
 }
 
 function toDisplayPositions(
-  positions: Record<string, EnginePosition>,
-  livePrices: Record<string, number>
+  positions?: Record<string, EnginePosition> | null,
+  livePrices?: Record<string, number> | null
 ): DisplayPosition[] {
-  return Object.values(positions).map((p) => {
-    const currentPrice = livePrices[p.symbol] ?? p.entry_price;
-    const pnl = (currentPrice - p.entry_price) * p.quantity;
-    const pnlPercent = p.entry_price ? (pnl / (p.entry_price * p.quantity)) * 100 : 0;
-    return {
-      symbol: p.symbol,
-      size: p.quantity,
-      entryPrice: p.entry_price,
-      currentPrice,
-      pnl,
-      pnlPercent,
-    };
-  });
+  if (!positions || typeof positions !== "object") return [];
+  const prices = livePrices || {};
+  return Object.values(positions)
+    .filter((p): p is EnginePosition => !!p && typeof p === "object")
+    .map((p) => {
+      const entryPrice = p.entry_price ?? 0;
+      const quantity = p.quantity ?? 0;
+      const currentPrice = prices[p.symbol] ?? entryPrice;
+      const pnl = (currentPrice - entryPrice) * quantity;
+      const pnlPercent = entryPrice && quantity ? (pnl / (entryPrice * quantity)) * 100 : 0;
+      return {
+        symbol: p.symbol || "UNKNOWN",
+        size: quantity,
+        entryPrice,
+        currentPrice,
+        pnl,
+        pnlPercent,
+      };
+    });
 }
 
 export function WalletPnLPro({ equityUsd, positions, livePrices, isConnected }: WalletPnLProProps) {
   const displayPositions = toDisplayPositions(positions, livePrices);
-  const unrealizedPnL = displayPositions.reduce((acc, pos) => acc + pos.pnl, 0);
-  const inPositionsUsd = displayPositions.reduce((acc, pos) => acc + pos.size * pos.currentPrice, 0);
-  const availableUsd = equityUsd !== null ? Math.max(equityUsd - inPositionsUsd, 0) : null;
+  const unrealizedPnL = displayPositions.reduce((acc, pos) => acc + (pos.pnl || 0), 0);
+  const inPositionsUsd = displayPositions.reduce((acc, pos) => acc + (pos.size || 0) * (pos.currentPrice || 0), 0);
+  const availableUsd = equityUsd !== null && equityUsd !== undefined ? Math.max(equityUsd - inPositionsUsd, 0) : null;
   const isPositive = unrealizedPnL >= 0;
 
   return (
@@ -50,7 +56,7 @@ export function WalletPnLPro({ equityUsd, positions, livePrices, isConnected }: 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="rounded-2xl bg-card/80 backdrop-blur-md border border-border/50 overflow-hidden"
+      className="rounded-2xl bg-card/80 backdrop-blur-md border border-border/50 overflow-hidden font-sans"
     >
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-border/50">
