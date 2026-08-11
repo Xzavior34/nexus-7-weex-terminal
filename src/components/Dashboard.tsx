@@ -197,6 +197,27 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
+    async function fetchRESTWallet() {
+      try {
+        const { api } = await import('@/services/api');
+        const st = await api.getStatus();
+        const eq = st?.last_equity ?? st?.last_equity_usd ?? st?.equity ?? st?.balance ?? 10000.0;
+        setWallet(prev => ({
+          ...prev,
+          total: prev.total > 0 ? prev.total : eq,
+          available: prev.available > 0 ? prev.available : eq,
+        }));
+      } catch (e) {
+        // ignore
+      }
+    }
+    fetchRESTWallet();
+    const interval = setInterval(fetchRESTWallet, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+
+  useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }

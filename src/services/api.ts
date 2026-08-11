@@ -63,6 +63,7 @@ export function getEngineApiUrl(): string {
   return (envUrl || DEFAULT_ENGINE_API_URL).replace(/\/+$/, "");
 }
 
+
 export function getEngineToken(): string {
   if (typeof window !== "undefined" && window.localStorage) {
     const stored = window.localStorage.getItem("NEXUS_ENGINE_TOKEN");
@@ -128,9 +129,17 @@ export interface EngineStatus {
   halt_reason?: string | null;
   last_equity_usd?: number | null;
   last_equity?: number | null;
+  equity?: number | null;
+  balance?: number | null;
+  usdt_balance?: number | null;
+  total_balance?: number | null;
+  available_balance?: number | null;
+  daily_pnl_usd?: number | null;
+  total_pnl_usd?: number | null;
   open_position_count?: number;
   config?: EngineStatusConfig;
 }
+
 
 export interface EnginePosition {
   symbol: string;

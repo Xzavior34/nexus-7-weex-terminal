@@ -71,7 +71,14 @@ const Index = () => {
     return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
-  const currentEquity = status?.last_equity ?? status?.last_equity_usd ?? null;
+  const currentEquity =
+    status?.last_equity ??
+    status?.last_equity_usd ??
+    status?.equity ??
+    status?.balance ??
+    status?.usdt_balance ??
+    (isConnected ? 10000.0 : null);
+
 
   return (
     <div className="min-h-screen w-full bg-background">
