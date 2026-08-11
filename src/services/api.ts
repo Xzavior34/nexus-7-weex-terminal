@@ -14,13 +14,11 @@
 
 const DEFAULT_ENGINE_API_URL = "https://nexus7-engine.onrender.com";
 
-function getEnvVariable(keys: string[], fallback: string = ""): string {
+function getEnvVariable(viteKey: string, nextKey: string, fallback: string = ""): string {
   try {
     if (typeof import.meta !== "undefined" && import.meta.env) {
-      for (const k of keys) {
-        const val = import.meta.env[k];
-        if (val !== undefined && val !== "") return String(val);
-      }
+      const val = import.meta.env[viteKey];
+      if (val !== undefined && val !== "") return String(val);
     }
   } catch {
     // Ignore
@@ -28,10 +26,10 @@ function getEnvVariable(keys: string[], fallback: string = ""): string {
 
   try {
     if (typeof process !== "undefined" && process.env) {
-      for (const k of keys) {
-        const val = process.env[k];
-        if (val !== undefined && val !== "") return String(val);
-      }
+      const nextVal = process.env[nextKey];
+      if (nextVal !== undefined && nextVal !== "") return String(nextVal);
+      const viteVal = process.env[viteKey];
+      if (viteVal !== undefined && viteVal !== "") return String(viteVal);
     }
   } catch {
     // Ignore
@@ -56,13 +54,9 @@ export function getEngineApiUrl(): string {
       return stored.trim().replace(/\/+$/, "");
     }
   }
-  const envUrl = getEnvVariable(
-    ["VITE_ENGINE_API_URL", "VITE_API_URL", "NEXT_PUBLIC_ENGINE_API_URL", "NEXT_PUBLIC_API_URL"],
-    DEFAULT_ENGINE_API_URL
-  );
+  const envUrl = getEnvVariable("VITE_ENGINE_API_URL", "NEXT_PUBLIC_ENGINE_API_URL", DEFAULT_ENGINE_API_URL);
   return (envUrl || DEFAULT_ENGINE_API_URL).replace(/\/+$/, "");
 }
-
 
 export function getEngineToken(): string {
   if (typeof window !== "undefined" && window.localStorage) {
@@ -71,15 +65,9 @@ export function getEngineToken(): string {
       return sanitizeToken(stored);
     }
   }
-  const envVal = getEnvVariable([
-    "VITE_ENGINE_TOKEN",
-    "VITE_ENGINE_API_TOKEN",
-    "VITE_API_AUTH_TOKEN",
-    "VITE_ENGINE_AUTH_TOKEN",
-    "NEXT_PUBLIC_ENGINE_TOKEN",
-    "NEXT_PUBLIC_ENGINE_API_TOKEN",
-    "NEXT_PUBLIC_API_AUTH_TOKEN",
-  ]);
+  const envVal =
+    getEnvVariable("VITE_ENGINE_TOKEN", "NEXT_PUBLIC_ENGINE_TOKEN") ||
+    getEnvVariable("VITE_ENGINE_API_TOKEN", "NEXT_PUBLIC_ENGINE_TOKEN");
   return sanitizeToken(envVal);
 }
 
@@ -129,17 +117,9 @@ export interface EngineStatus {
   halt_reason?: string | null;
   last_equity_usd?: number | null;
   last_equity?: number | null;
-  equity?: number | null;
-  balance?: number | null;
-  usdt_balance?: number | null;
-  total_balance?: number | null;
-  available_balance?: number | null;
-  daily_pnl_usd?: number | null;
-  total_pnl_usd?: number | null;
   open_position_count?: number;
   config?: EngineStatusConfig;
 }
-
 
 export interface EnginePosition {
   symbol: string;
@@ -214,7 +194,16 @@ export class EngineApiWakingUpError extends EngineApiError {
 
 let hasAlerted401 = false;
 
-async function engineFetch<T>(path: string, timeoutMs = 12000): Promise<T> {
+export interface RequestOptions {
+  method?: "GET" | "POST" | "PUT" | "DELETE" | string;
+  body?: any;
+  timeoutMs?: number;
+}
+
+async function engineFetch<T>(path: string, options: RequestOptions | number = {}): Promise<T> {
+  const opts: RequestOptions = typeof options === "number" ? { timeoutMs: options } : options;
+  const { method = "GET", body, timeoutMs = 12000 } = opts;
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -228,7 +217,9 @@ async function engineFetch<T>(path: string, timeoutMs = 12000): Promise<T> {
 
   try {
     const res = await fetch(`${baseUrl}${path}`, {
+      method,
       headers,
+      body: body ? JSON.stringify(body) : undefined,
       signal: controller.signal,
     });
     clearTimeout(timer);
@@ -309,4 +300,3 @@ export const api = {
       { method: "POST" }
     ),
 };
-
